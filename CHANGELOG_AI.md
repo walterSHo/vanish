@@ -412,3 +412,18 @@ For each new entry use:
   The desktop-oriented gameplay layout could become cramped on phones, especially with the board and side panels competing for width in one row.
 - Notes / follow-up:
   This was a CSS-only responsive pass for the gameplay screen. No gameplay or state logic was changed.
+
+### 2026-04-15 20:52 - Added focused bug/optimization audit report
+- Goal:
+  Review the current implementation and document concrete bugs plus targeted optimization opportunities.
+- Files changed:
+  - BUG_AUDIT_AI.md
+  - CHANGELOG_AI.md
+- What was changed:
+  Added a dedicated audit note with prioritized findings around Daily Challenge result handling, setup mode UI synchronization, daily info close behavior, and defensive checks; also listed low-risk optimization directions.
+- Why:
+  Capture actionable QA findings in-repo so follow-up fixes can be implemented without re-auditing from scratch.
+- Notes / follow-up:
+  The most important fix is Daily Challenge loss handling when the bot wins.
+
+---
