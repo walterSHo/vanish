@@ -427,3 +427,19 @@ For each new entry use:
   The most important fix is Daily Challenge loss handling when the bot wins.
 
 ---
+
+### 2026-04-15 20:58 - Fixed key issues from bug audit
+- Goal:
+  Close the highest-priority bugs identified in the previous audit without broad refactoring.
+- Files changed:
+  - js/app.js
+  - js/i18n.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Added proper Daily Challenge defeat handling when the opponent wins, kept selected mode unchanged when closing the daily info popup, added a defensive fallback if daily challenge payload is missing at start, and synchronized setup mode switching with availability UI updates. Also added localized daily-loss labels for RU/EN.
+- Why:
+  Prevent incorrect daily win-flow on losses and remove setup flow inconsistencies.
+- Notes / follow-up:
+  Remaining optimization ideas from the audit (DOM/render micro-optimizations) can be addressed separately.
+
+---

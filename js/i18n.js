@@ -49,6 +49,8 @@ const T = {
     dailyCpuName:  'ВЫЗОВ',
     dailyFailed:   'ВРЕМЯ ВЫШЛО',
     dailyFailSub:  'попробуй завтра',
+    dailyLost:     'ВЫЗОВ ПРОВАЛЕН',
+    dailyLostSub:  'соперник захватил поле',
     dailyObjectives: {
       dailyObjWin:   'Победи любым способом.',
       dailyObjMoves: 'Победи за {n} ходов.',
@@ -108,6 +110,8 @@ const T = {
     dailyCpuName:  'CHALLENGE',
     dailyFailed:   'OUT OF MOVES',
     dailyFailSub:  'try again tomorrow',
+    dailyLost:     'CHALLENGE FAILED',
+    dailyLostSub:  'opponent controlled the grid',
     dailyObjectives: {
       dailyObjWin:   'Win by any means.',
       dailyObjMoves: 'Win within {n} moves.',
