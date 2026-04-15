@@ -1,54 +1,53 @@
 # ROADMAP.md
 
 ## Project
+
 VANISH — stylish browser-based infinite tic-tac-toe with disappearing oldest marks.
 
 ## Current phase
-Polish setup flow and stabilize game-mode architecture for future Telegram Mini App support.
+
+Post-demo polish and feature completion before Telegram Mini App adaptation.
 
 ## Active goals
 
-### 1. Setup menu polish
-- simplify the menu UX
-- make setup screen cleaner and more intuitive
-- keep only one nickname field for the current user
-- improve labels, spacing, and flow if needed
+### 1. Audio polish
 
-### 2. Opponent type flow
-- add opponent type selection:
-  - bot
-  - local human
-- remove setup dependence on opponent nickname
-- use current user identity as the main profile concept
+- make background music start reliably from the first valid user interaction
+- remove the issue where music starts only after several button presses
+- keep playlist transitions smooth
+- preserve music ON/OFF behavior cleanly across menu and gameplay
 
-### 3. Mode gating
-- if opponent type = bot:
-  - Duel
-  - Daily Challenge
-- if opponent type = local human:
-  - Duel
-  - Ranked Match
+### 2. Ranked mode completion
 
-### 4. In-match identity handling
-- current user nickname should be shown in match UI
-- opponent label depends on opponent type:
-  - bot => BOT / WRAITH AI
-  - local => GUEST / LOCAL OPPONENT
+- keep Ranked mode visually intentional
+- finish locked / coming soon flow or replace it with the real playable ranked flow
+- prevent broken or half-ready ranked UX
+- define ranked-specific rules, progression, and result handling
 
-### 5. Telegram Mini App direction
-- prefill current user nickname from Telegram if available
-- keep setup editable
-- do not create opponent identity from Telegram
-- leave online mode for later
+### 3. Core UX cleanup
+
+- review setup flow one more time after public demo testing
+- fix small friction points found by friends/testers
+- keep the interface clean, readable, and consistent
+- preserve the current visual identity
+
+### 4. Telegram Mini App preparation
+
+- prepare the project for Telegram Mini App embedding
+- review launch flow inside Telegram context
+- adapt identity/bootstrap logic for Telegram user data
+- keep the web version as the base reference
 
 ## Later goals
+
 - improve bot behavior
-- refine Daily Challenge logic
-- refine Ranked Match rules
-- online mode later
-- telemetry / analytics only if needed later
+- expand Daily Challenge logic
+- add better end-of-match feedback
+- add result sharing or social hooks
+- telemetry / analytics only if truly needed
 
 ## Out of scope for now
+
 - full online multiplayer
 - backend persistence
 - account systems

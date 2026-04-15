@@ -352,3 +352,18 @@ For each new entry use:
   Music playback was already working, but the first reliable start trigger happened too late in the flow, so menu navigation felt silent until the user entered gameplay or another later state.
 - Notes / follow-up:
   Syntax was checked with `node --check js/app.js`. The playlist logic itself was left unchanged, so menu and gameplay continue using the same ongoing music session without unnecessary restarts.
+
+---
+
+### 2026-04-15 23:20 - Updated roadmap for post-demo phase
+- Goal:
+  Refresh the project roadmap to reflect the current post-demo priorities before Telegram Mini App adaptation.
+- Files changed:
+  - ROADMAP.md
+  - CHANGELOG_AI.md
+- What was changed:
+  Replaced the earlier setup-flow roadmap with a new post-demo roadmap focused on audio polish, ranked-mode completion, final UX cleanup, and Telegram Mini App preparation.
+- Why:
+  The project direction has moved past initial setup/menu groundwork and now needs a clearer plan for polishing the public demo into the next stage.
+- Notes / follow-up:
+  This was a planning-only update and did not change gameplay or UI code.
