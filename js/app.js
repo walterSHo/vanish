@@ -181,7 +181,6 @@ function openDailyInfo() {
 
 function closeDailyInfo() {
   document.getElementById('daily-info-overlay').classList.remove('show');
-  selectMode('duel');
 }
 
 function closeDailyInfoOnBackdrop(e) {
@@ -208,6 +207,7 @@ function startDailyChallenge() {
   assignDailySides();
   histStrip.innerHTML = '';
   buildBoard();
+  if (!dailyChallenge) dailyChallenge = generateDailyChallenge(todayString());
   const dc = dailyChallenge;
   const preMarks = { cipher: [], wraith: [] };
   dc.preBoard.forEach((owner, idx) => {
@@ -360,6 +360,7 @@ function selectMode(m) {
   document.getElementById('btn-mode-ranked').classList.toggle('active', m === 'ranked');
   document.getElementById('btn-mode-daily').classList.toggle('active', m === 'daily');
   syncRankedLockState();
+  syncAvailableModes();
 }
 
 function selectOpponentType(type) {
@@ -925,6 +926,10 @@ function placeNewMark(player, index, oppThreatsBeforeMove) {
 
     if (winner) {
       highlightWin(winLine, winner);
+      if (gameMode === 'daily' && winner !== currentUserFaction) {
+        triggerDailyLoss(winner);
+        return;
+      }
       triggerWin(winner);
     } else {
       if (gameMode === 'daily' && player === 'cipher' && dailyMovesLeft !== null && dailyMovesLeft <= 0) {
@@ -955,6 +960,32 @@ function triggerDailyFail() {
     winTitle.style.textShadow = '0 0 14px #ff6a0088';
     document.getElementById('win-subtitle').textContent = t().dailyFailSub;
     winSym.innerHTML    = '';
+    scoreDisp.innerHTML = '';
+    updateDailyResultText('fail');
+    winOverlay.classList.add('show');
+    setTimeout(() => winOverlay.querySelector('.btn').focus(), 100);
+  }, 800);
+}
+
+function triggerDailyLoss(winner) {
+  cancelBotMove();
+  stopDailyTimer('fail');
+  gameOver = true;
+  updateAgainButtonLabel();
+  const winnerName = playerDisplayName(winner);
+  statusEl.textContent = t().wins(winnerName);
+  statusEl.style.color = winner === 'cipher' ? 'var(--cipher)' : 'var(--wraith)';
+  showCombo(t().dailyLost, 'var(--warn)');
+  setTimeout(() => {
+    winTitle.textContent      = t().dailyLost;
+    winTitle.className        = '';
+    winTitle.style.color      = 'var(--warn)';
+    winTitle.style.textShadow = '0 0 14px #ff6a0088';
+    document.getElementById('win-subtitle').textContent = t().dailyLostSub;
+    winSym.innerHTML    = winner === 'cipher' ? cipherSVG('#00eeff', 100) : wraithSVG('#ff00cc', 100);
+    winSym.style.filter = winner === 'cipher'
+      ? 'drop-shadow(0 0 14px #00eeffaa)'
+      : 'drop-shadow(0 0 14px #ff00ccaa)';
     scoreDisp.innerHTML = '';
     updateDailyResultText('fail');
     winOverlay.classList.add('show');
