@@ -367,3 +367,48 @@ For each new entry use:
   The project direction has moved past initial setup/menu groundwork and now needs a clearer plan for polishing the public demo into the next stage.
 - Notes / follow-up:
   This was a planning-only update and did not change gameplay or UI code.
+
+---
+
+### 2026-04-15 23:30 - Added minimal mobile responsive foundation
+- Goal:
+  Make the layout safer on small mobile widths without redesigning the desktop interface.
+- Files changed:
+  - css/styles.css
+  - CHANGELOG_AI.md
+- What was changed:
+  Added a small responsive foundation to the existing stylesheet: explicit horizontal overflow protection, footer wrapping, safer badge text wrapping, and narrow-screen adjustments for header spacing, player panels, board size, and key text sizing at `430px` and `360px` breakpoints.
+- Why:
+  The desktop layout was visually consistent, but the combined width of the side panels, board, header, and controls could overflow on phones around `320px–430px`.
+- Notes / follow-up:
+  The existing viewport meta tag in `index.html` was already correct, so no HTML change was needed for this task.
+
+---
+
+### 2026-04-15 23:45 - Improved mobile setup menu layout
+- Goal:
+  Make the setup screen comfortable and readable on mobile without redesigning the current menu.
+- Files changed:
+  - css/styles.css
+  - CHANGELOG_AI.md
+- What was changed:
+  Added setup-specific mobile sizing and spacing improvements: the setup modal now uses safe viewport padding, scrolls vertically if content grows tall, stays fully inside the screen, and gives tabs, toggles, inputs, music control, and the Start button larger touch-friendly heights. Also tightened setup spacing and type sizing at narrow widths so the sections stack cleanly without horizontal scrolling.
+- Why:
+  The setup menu had become crowded on phones, so the controls needed a stronger responsive foundation to remain readable and easy to tap.
+- Notes / follow-up:
+  This was a CSS-only setup polish pass. Existing setup logic and gameplay behavior were not changed.
+
+---
+
+### 2026-04-16 00:00 - Improved mobile gameplay layout
+- Goal:
+  Make the in-game screen readable and usable on phones while preserving the current visual style.
+- Files changed:
+  - css/styles.css
+  - CHANGELOG_AI.md
+- What was changed:
+  Added gameplay-focused mobile layout rules that keep the board centered, move the side player panels into a compact row beneath the board on narrow screens, and tighten panel/rank sizing so labels stay readable without overflow. Also improved small-screen spacing for status text, move history, warning text, and footer action buttons so the gameplay UI remains touch-friendly and avoids horizontal scrolling.
+- Why:
+  The desktop-oriented gameplay layout could become cramped on phones, especially with the board and side panels competing for width in one row.
+- Notes / follow-up:
+  This was a CSS-only responsive pass for the gameplay screen. No gameplay or state logic was changed.

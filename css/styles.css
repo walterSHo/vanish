@@ -1,5 +1,11 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 :root {
   --bg:        #09090f;
   --grid:      #1c1c30;
@@ -57,6 +63,7 @@ body {
   width: 100%;
   max-width: 520px;
   padding: 0 8px;
+  min-width: 0;
 }
 
 /* ── PLAYER PANELS ── */
@@ -392,14 +399,18 @@ body {
   display: none; position: fixed; inset: 0;
   background: #09090fdd; z-index: 300;
   align-items: center; justify-content: center;
+  padding: 16px;
 }
 #setup-overlay.show { display: flex; }
 #setup-box {
   background: #0f0f1a;
   border: 1px solid var(--muted);
-  max-width: 320px; width: 90%;
+  max-width: 320px; width: min(100%, 320px);
   padding: 28px 24px;
   display: flex; flex-direction: column; gap: 20px;
+  max-height: min(100vh - 32px, 760px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 #setup-title {
   font-family: 'Bebas Neue', sans-serif;
@@ -416,12 +427,14 @@ body {
 .setup-label.cipher { color: var(--cipher); }
 .setup-label.wraith  { color: var(--wraith); }
 .setup-input {
+  width: 100%;
   font-family: 'Space Mono', monospace;
   font-size: 0.8rem; letter-spacing: 1px;
   background: #0a0a16;
   border: 1px solid var(--muted);
   color: var(--text);
-  padding: 8px 10px;
+  padding: 11px 12px;
+  min-height: 44px;
   outline: none;
   transition: border-color 0.2s;
 }
@@ -436,6 +449,7 @@ body {
 .setup-rounds-types {
   display: flex;
   gap: 0;
+  min-width: 0;
   border: 1px solid var(--muted);
   border-radius: 2px;
   overflow: hidden;
@@ -451,10 +465,12 @@ body {
 .setup-bot-btn,
 .setup-round-btn {
   flex: 1;
+  min-width: 0;
   font-family: 'Bebas Neue', sans-serif;
   font-size: 0.78rem;
   letter-spacing: 2px;
-  padding: 7px 10px;
+  min-height: 44px;
+  padding: 10px 10px;
   background: transparent;
   border: none;
   color: var(--muted);
@@ -495,7 +511,8 @@ body {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 0.82rem;
   letter-spacing: 2px;
-  padding: 8px 10px;
+  min-height: 44px;
+  padding: 10px 12px;
   background: transparent;
   border: 1px solid var(--muted);
   color: var(--text);
@@ -512,6 +529,9 @@ body {
 }
 .setup-music-toggle.is-off {
   color: var(--muted);
+}
+.setup-music-text {
+  min-width: 0;
 }
 .setup-music-state {
   min-width: 38px;
@@ -537,12 +557,17 @@ body {
   box-shadow: none;
   pointer-events: none;
 }
+#btn-setup-start {
+  width: 100%;
+  min-height: 48px;
+}
 
 /* ── FOOTER ── */
 #footer {
   max-width: 520px; width: 100%;
   display: flex; justify-content: center; gap: 12px;
   padding: 10px 12px 16px;
+  flex-wrap: wrap;
 }
 .btn {
   font-family: 'Bebas Neue', sans-serif;
@@ -748,6 +773,49 @@ body {
   }
 }
 
+@media (max-width: 430px) {
+  #setup-overlay {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  #setup-box {
+    width: 100%;
+    max-width: none;
+    margin: auto;
+    padding: 22px 16px 18px;
+    gap: 16px;
+    max-height: calc(100vh - 24px);
+  }
+
+  #setup-title {
+    font-size: 1.45rem;
+    letter-spacing: 4px;
+  }
+
+  .setup-row {
+    gap: 8px;
+  }
+
+  .setup-opponent-card,
+  .setup-bot-card,
+  .setup-rounds-card,
+  .setup-music-card {
+    padding: 8px;
+  }
+
+  #mode-toggle {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .mode-btn {
+    min-height: 44px;
+    font-size: 0.76rem;
+    letter-spacing: 1.4px;
+    padding: 10px 6px;
+  }
+}
+
 /* ── MODE BADGE ── */
 #mode-badge {
   display: none;
@@ -758,6 +826,353 @@ body {
   color: #ffff00;
   opacity: 0.6;
   padding: 0 8px 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 430px) {
+  #game-area {
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 12px 10px;
+  }
+
+  #board-wrap {
+    order: 1;
+    flex: 0 0 100%;
+    display: flex;
+    justify-content: center;
+    margin: 0 auto 2px;
+  }
+
+  .panel {
+    order: 2;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 150px;
+    width: auto;
+    gap: 6px;
+  }
+
+  .panel-rank {
+    min-height: 18px;
+    gap: 1px;
+  }
+
+  .rank-name {
+    font-size: 0.58rem;
+    letter-spacing: 2px;
+  }
+
+  .rank-pips {
+    font-size: 0.46rem;
+    letter-spacing: 1.5px;
+  }
+
+  #header {
+    padding: 12px 10px 8px;
+    gap: 10px;
+  }
+
+  #title {
+    font-size: 2.35rem;
+    letter-spacing: 4px;
+  }
+
+  #subtitle {
+    max-width: 160px;
+    line-height: 1.3;
+    letter-spacing: 1.5px;
+  }
+
+  #game-area {
+    gap: 10px;
+    padding: 0 6px;
+  }
+
+  .panel {
+    width: auto;
+    max-width: 150px;
+    gap: 6px;
+  }
+
+  .panel-name {
+    font-size: 0.96rem;
+    letter-spacing: 2px;
+  }
+
+  .panel-nick {
+    max-width: 100%;
+    font-size: 0.52rem;
+  }
+
+  .faction-symbol {
+    width: 44px;
+    height: 44px;
+  }
+
+  .dots {
+    gap: 5px;
+  }
+
+  .dot {
+    width: 9px;
+    height: 9px;
+  }
+
+  #board {
+    width: min(50vw, 210px);
+    height: min(50vw, 210px);
+  }
+
+  .board-axis-top {
+    width: min(50vw, 210px);
+  }
+
+  .board-axis-left {
+    height: min(50vw, 210px);
+  }
+
+  #history-wrap,
+  #footer,
+  #status-bar,
+  #warn-hint,
+  #combo-banner,
+  #mode-badge {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  #status-msg {
+    line-height: 1.35;
+  }
+
+  #history-wrap {
+    min-height: 0;
+    padding-top: 6px;
+  }
+
+  #history-label {
+    margin-bottom: 5px;
+  }
+
+  #history-strip {
+    gap: 5px;
+    padding-bottom: 4px;
+  }
+
+  .hist-item {
+    font-size: 0.54rem;
+    padding: 2px 5px;
+  }
+
+  #footer {
+    gap: 10px;
+    padding-top: 12px;
+    padding-bottom: 18px;
+  }
+
+  #footer .btn {
+    flex: 1 1 140px;
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  #game-area {
+    gap: 10px 8px;
+  }
+
+  #board-wrap {
+    margin-bottom: 0;
+  }
+
+  .panel {
+    max-width: none;
+    gap: 5px;
+  }
+
+  .panel-rank {
+    min-height: 16px;
+  }
+
+  .rank-name {
+    font-size: 0.52rem;
+    letter-spacing: 1.6px;
+  }
+
+  .rank-pips {
+    font-size: 0.42rem;
+    letter-spacing: 1.2px;
+  }
+
+  #setup-overlay {
+    padding: 8px;
+  }
+
+  #setup-box {
+    padding: 18px 12px 14px;
+    gap: 14px;
+    max-height: calc(100vh - 16px);
+  }
+
+  #setup-title {
+    font-size: 1.3rem;
+    letter-spacing: 3px;
+  }
+
+  .setup-label {
+    font-size: 0.52rem;
+    letter-spacing: 1.6px;
+  }
+
+  .setup-opponent-card,
+  .setup-bot-card,
+  .setup-rounds-card,
+  .setup-music-card {
+    padding: 7px;
+  }
+
+  .setup-input {
+    font-size: 0.76rem;
+    letter-spacing: 0.8px;
+    padding: 10px 10px;
+  }
+
+  .setup-opponent-btn,
+  .setup-bot-btn,
+  .setup-round-btn,
+  .setup-music-toggle,
+  #btn-setup-start {
+    min-height: 46px;
+  }
+
+  .setup-opponent-btn,
+  .setup-bot-btn,
+  .setup-round-btn {
+    font-size: 0.72rem;
+    letter-spacing: 1.2px;
+    padding: 10px 5px;
+  }
+
+  .setup-music-toggle {
+    font-size: 0.76rem;
+    letter-spacing: 1.5px;
+    padding: 10px;
+  }
+
+  .setup-music-state {
+    min-width: 32px;
+  }
+
+  .mode-btn {
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    padding: 10px 4px;
+  }
+
+  #header {
+    align-items: flex-start;
+  }
+
+  #title {
+    font-size: 2.05rem;
+    letter-spacing: 3px;
+  }
+
+  #subtitle {
+    max-width: 132px;
+    font-size: 0.54rem;
+  }
+
+  #game-area { padding: 0 4px; }
+
+  .panel {
+    width: auto;
+  }
+
+  .panel-name {
+    font-size: 0.84rem;
+    letter-spacing: 1.5px;
+  }
+
+  .panel-nick {
+    max-width: 100%;
+    font-size: 0.48rem;
+  }
+
+  .faction-symbol {
+    width: 38px;
+    height: 38px;
+  }
+
+  .turn-tag {
+    font-size: 0.46rem;
+    letter-spacing: 1px;
+  }
+
+  #board {
+    width: min(48vw, 168px);
+    height: min(48vw, 168px);
+  }
+
+  .board-axis-top {
+    width: min(48vw, 168px);
+  }
+
+  .board-axis-left {
+    height: min(48vw, 168px);
+  }
+
+  #session-score {
+    gap: 10px;
+  }
+
+  #status-bar {
+    min-height: 34px;
+  }
+
+  #status-msg {
+    font-size: 0.62rem;
+    letter-spacing: 1.5px;
+  }
+
+  #warn-hint {
+    font-size: 0.45rem;
+    letter-spacing: 1.2px;
+  }
+
+  #history-wrap,
+  #footer,
+  #status-bar,
+  #warn-hint,
+  #combo-banner,
+  #mode-badge {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  #history-strip {
+    gap: 4px;
+  }
+
+  .hist-item {
+    font-size: 0.5rem;
+    letter-spacing: 0.8px;
+  }
+
+  .sscore,
+  .sscore-sep {
+    font-size: 0.86rem;
+    letter-spacing: 2px;
+  }
+
+  #footer .btn {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
 }
 
 /* ── RANK UI (side panels) ── */
