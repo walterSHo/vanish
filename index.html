@@ -55,7 +55,10 @@
 
 <!-- COMBO BANNER -->
 <div id="combo-banner" aria-live="polite" aria-atomic="true">
-  <div id="combo-text"></div>
+  <div id="combo-text">
+    <span id="combo-title"></span>
+    <span id="combo-message"></span>
+  </div>
 </div>
 
 <!-- MODE BADGE -->
@@ -219,12 +222,48 @@
 
 <!-- WIN OVERLAY -->
 <div id="win-overlay" role="dialog" aria-modal="true" aria-labelledby="win-title">
+  <div id="win-state"></div>
   <div id="win-faction-symbol"></div>
   <div id="win-title"></div>
   <div id="win-subtitle" data-ru="захватывает поле" data-en="controls the grid">захватывает поле</div>
+  <div id="result-summary">
+    <div class="result-summary-row">
+      <span class="result-summary-label" data-ru="СТАТУС" data-en="RESULT">СТАТУС</span>
+      <span class="result-summary-value" id="result-summary-state"></span>
+    </div>
+    <div class="result-summary-row">
+      <span class="result-summary-label" data-ru="ИГРОК" data-en="PLAYER">ИГРОК</span>
+      <span class="result-summary-value" id="result-summary-player"></span>
+    </div>
+    <div class="result-summary-row" id="result-summary-row-title" style="display:none;">
+      <span class="result-summary-label" data-ru="ТИТУЛ" data-en="TITLE">ТИТУЛ</span>
+      <span class="result-summary-value result-summary-title-value" id="result-summary-title"></span>
+    </div>
+    <div class="result-summary-row">
+      <span class="result-summary-label" data-ru="РЕЖИМ" data-en="MODE">РЕЖИМ</span>
+      <span class="result-summary-value" id="result-summary-mode"></span>
+    </div>
+    <div class="result-summary-row">
+      <span class="result-summary-label" data-ru="ВРЕМЯ" data-en="TIME">ВРЕМЯ</span>
+      <span class="result-summary-value" id="match-result-time"></span>
+    </div>
+    <div class="result-summary-row" id="result-summary-row-difficulty" style="display:none;">
+      <span class="result-summary-label" data-ru="СЛОЖНОСТЬ" data-en="DIFFICULTY">СЛОЖНОСТЬ</span>
+      <span class="result-summary-value" id="result-summary-difficulty"></span>
+    </div>
+  </div>
   <div id="score-display"></div>
   <div id="daily-result"></div>
-  <button class="btn" onclick="handleAgainButton()" id="btn-again" data-ru="ЕЩЁ РАЗ" data-en="PLAY AGAIN">ЕЩЁ РАЗ</button>
+  <div id="win-actions">
+    <div id="win-actions-main">
+      <button class="btn" onclick="handleAgainButton()" id="btn-again" data-ru="ЕЩЁ РАЗ" data-en="PLAY AGAIN">ЕЩЁ РАЗ</button>
+      <button class="btn btn-ghost" onclick="handleMenuButton()" id="btn-menu" data-ru="В МЕНЮ" data-en="MAIN MENU">В МЕНЮ</button>
+    </div>
+    <div id="win-actions-secondary">
+      <button class="btn btn-replay" onclick="playLatestMatchReplay()" id="btn-replay" data-ru="РЕПЛЕЙ" data-en="REPLAY">РЕПЛЕЙ</button>
+      <button class="btn btn-export" onclick="exportResultCard()" id="btn-export" data-ru="СКАЧАТЬ" data-en="DOWNLOAD">СКАЧАТЬ</button>
+    </div>
+  </div>
 </div>
 
 <script src="js/audio.js"></script>

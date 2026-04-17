@@ -12,8 +12,12 @@ const T = {
     turnTag:       'ваш ход',
     restart:       'ЗАНОВО',
     playAgain:     'ЕЩЁ РАЗ',
+    mainMenu:      'В МЕНЮ',
     rulesBtn:      'ПРАВИЛА',
     rulesClose:    'ПОНЯЛ',
+    replayBtn:     'РЕПЛЕЙ',
+    replayRunning: 'РЕПЛЕЙ МАТЧА',
+    replayFinal:   'ФИНАЛЬНЫЙ КАДР',
     setupTitle:    'ИГРОКИ',
     setupStart:    'НАЧАТЬ',
     setupLabelC:   'ВАШ НИК',
@@ -34,6 +38,8 @@ const T = {
     botNorm:       'НОРМ',
     botXO:         'ХО',
     winSub:        'захватывает поле',
+    resultVictory: 'ПОБЕДА',
+    resultDefeat:  'ПОРАЖЕНИЕ',
     rankUp:        'РАНГ ПОВЫШЕН —',
     rankedBadge:   'РАНГОВЫЙ РЕЖИМ',
     roundBadge:    'РАУНД {current}/{total}',
@@ -46,6 +52,32 @@ const T = {
     dailyTime:     'время: {time}',
     dailyResultWin: 'время прохождения: {time}',
     dailyResultFail: 'итоговое время: {time}',
+    matchTime:     'длительность матча: {time}',
+    exportResult:  'СКАЧАТЬ',
+    exportDate:    'дата',
+    exportLabelPlayer: 'ИГРОК',
+    exportLabelTitle: 'ТИТУЛ',
+    exportLabelMode: 'РЕЖИМ',
+    exportLabelTime: 'ВРЕМЯ',
+    exportLabelDifficulty: 'СЛОЖН.',
+    exportFlavorWin: 'сигнал закреплён // vanish помнит',
+    exportFlavorLoss: 'контур дрогнул // реванш рядом',
+    resultFlavorWins: [
+      '«{name}» был беспощаден.',
+      '«{name}» не оставил шансов.',
+      '«{name}» сыграл хладнокровно.',
+      '«{name}» исчез, но оставил легенду.',
+      '«{name}» закрыл партию без дрожи.',
+      '«{name}» держал ритм до конца.',
+    ],
+    resultFlavorLosses: [
+      'контур дрогнул, но игра ещё не окончена.',
+      'сетка ушла из рук, но не из памяти.',
+      'сигнал сорвался, реванш уже рядом.',
+      'эта ночь досталась не тебе.',
+      'ходы погасли, но стиль остался.',
+      'партия ушла в тень, следующая может стать твоей.',
+    ],
     dailyCpuName:  'ВЫЗОВ',
     dailyFailed:   'ВРЕМЯ ВЫШЛО',
     dailyFailSub:  'попробуй завтра',
@@ -60,6 +92,30 @@ const T = {
       intercept:    'ПЕРЕХВАТ',
       doubleThreat: 'ДВОЙНАЯ УГРОЗА',
     },
+    comboTitles: [
+      'ЦЕПЬ',
+      'ПЕРЕГРУЗ',
+      'СИНХРО',
+      'ФАНТОМ',
+      'ИМПУЛЬС',
+      'СИГНАЛ',
+      'РАЗГОН',
+      'КОНТУР',
+      'ЭХО',
+      'ПОТОК',
+      'СДВИГ',
+      'ПРОРЫВ',
+    ],
+    titles: {
+      merciless: 'БЕСПОЩАДНЫЙ',
+      rhythmBreaker: 'РАЗРУШИТЕЛЬ РИТМА',
+      signalBinder: 'СВЯЗУЮЩИЙ СИГНАЛ',
+      boardPhantom: 'ФАНТОМ ДОСКИ',
+      challengeShade: 'ТЕНЬ ВЫЗОВА',
+      coldblooded: 'ХЛАДНОКРОВНЫЙ',
+      lastPulse: 'ПОСЛЕДНИЙ ИМПУЛЬС',
+      silentHunter: 'ТИХИЙ ОХОТНИК',
+    },
   },
   en: {
     subtitle:      "marks fade \u2022 legends don't",
@@ -71,8 +127,12 @@ const T = {
     turnTag:       'your turn',
     restart:       'RESTART',
     playAgain:     'PLAY AGAIN',
+    mainMenu:      'MAIN MENU',
     rulesBtn:      'RULES',
     rulesClose:    'GOT IT',
+    replayBtn:     'REPLAY',
+    replayRunning: 'MATCH REPLAY',
+    replayFinal:   'FINAL FRAME',
     setupTitle:    'PLAYERS',
     setupStart:    'START',
     setupLabelC:   'YOUR NICKNAME',
@@ -93,6 +153,8 @@ const T = {
     botNorm:       'NORM',
     botXO:         'XO',
     winSub:        'controls the grid',
+    resultVictory: 'VICTORY',
+    resultDefeat:  'DEFEAT',
     rankUp:        'RANK UP —',
     rankedBadge:   'RANKED MODE',
     roundBadge:    'ROUND {current}/{total}',
@@ -105,6 +167,32 @@ const T = {
     dailyTime:     'time: {time}',
     dailyResultWin: 'clear time: {time}',
     dailyResultFail: 'final time: {time}',
+    matchTime:     'match duration: {time}',
+    exportResult:  'DOWNLOAD',
+    exportDate:    'date',
+    exportLabelPlayer: 'PLAYER',
+    exportLabelTitle: 'TITLE',
+    exportLabelMode: 'MODE',
+    exportLabelTime: 'TIME',
+    exportLabelDifficulty: 'DIFF',
+    exportFlavorWin: 'signal locked // vanish remembers',
+    exportFlavorLoss: 'the grid slipped // rematch soon',
+    resultFlavorWins: [
+      '{name} left no room to breathe.',
+      '{name} played it cold.',
+      '{name} closed the grid without a tremor.',
+      '{name} vanished, but left a legend.',
+      '{name} held the line to the end.',
+      '{name} made it look inevitable.',
+    ],
+    resultFlavorLosses: [
+      'the grid slipped away, but not for long.',
+      'the signal broke, the rematch is near.',
+      'this round fell into shadow.',
+      'the board turned cold this time.',
+      'the marks faded, the nerve did not.',
+      'the line was lost, the style was not.',
+    ],
     dailyCpuName:  'CHALLENGE',
     dailyFailed:   'OUT OF MOVES',
     dailyFailSub:  'try again tomorrow',
@@ -118,6 +206,28 @@ const T = {
       fadewin:      'FADE & WIN',
       intercept:    'INTERCEPT',
       doubleThreat: 'DOUBLE THREAT',
+    },
+    comboTitles: [
+      'CHAIN',
+      'OVERDRIVE',
+      'PHANTOM LINK',
+      'NEON LOCK',
+      'VOID SYNC',
+      'SIGNAL BURST',
+      'ECHO STRIKE',
+      'GHOST THREAD',
+      'LUCID CHAIN',
+      'VANISH FLOW',
+    ],
+    titles: {
+      merciless: 'MERCILESS',
+      rhythmBreaker: 'RHYTHM BREAKER',
+      signalBinder: 'SIGNAL BINDER',
+      boardPhantom: 'BOARD PHANTOM',
+      challengeShade: 'CHALLENGE SHADE',
+      coldblooded: 'COLDBLOODED',
+      lastPulse: 'LAST PULSE',
+      silentHunter: 'SILENT HUNTER',
     },
   },
 };
@@ -134,7 +244,13 @@ function setLang(l) {
     el.innerHTML = el.dataset[l];
   });
   document.getElementById('btn-restart').textContent    = t().restart;
+  const btnExport = document.getElementById('btn-export');
+  if (btnExport) btnExport.textContent = t().exportResult;
+  const btnReplay = document.getElementById('btn-replay');
+  if (btnReplay) btnReplay.textContent = t().replayBtn;
   document.getElementById('btn-again').textContent      = t().playAgain;
+  const btnMenu = document.getElementById('btn-menu');
+  if (btnMenu) btnMenu.textContent = t().mainMenu;
   document.getElementById('btn-rules').textContent      = t().rulesBtn;
   document.getElementById('btn-rules-close').textContent = t().rulesClose;
   document.getElementById('btn-setup-start').textContent = t().setupStart;
@@ -146,6 +262,15 @@ function setLang(l) {
   if (typeof updateAgainButtonLabel !== 'undefined') updateAgainButtonLabel();
   if (typeof updateDailyResultText !== 'undefined' && typeof gameMode !== 'undefined' && gameMode === 'daily' && typeof gameOver !== 'undefined' && gameOver) {
     updateDailyResultText(document.getElementById('score-display').textContent ? 'win' : 'fail');
+  }
+  if (typeof updateResultSummary !== 'undefined') updateResultSummary();
+  if (typeof updateResultFlavorText !== 'undefined') updateResultFlavorText();
+  if (typeof updateMatchResultText !== 'undefined') updateMatchResultText();
+  if (typeof setResultPresentation !== 'undefined') {
+    const winOverlay = document.getElementById('win-overlay');
+    if (winOverlay && winOverlay.classList.contains('show')) {
+      setResultPresentation(winOverlay.classList.contains('is-loss') ? 'loss' : 'win');
+    }
   }
 
   // update setup input placeholders to match language defaults

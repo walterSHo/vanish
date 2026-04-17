@@ -250,55 +250,362 @@ function ensureMusicFromUserGesture() {
   startMusic();
 }
 
-function playTone(opts) {
+function rand(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function createOutputChain(ctx, opts = {}) {
+  const output = ctx.createGain();
+  output.gain.value = 1;
+  let tail = output;
+
+  if (opts.filterType) {
+    const filter = ctx.createBiquadFilter();
+    filter.type = opts.filterType;
+    filter.frequency.value = opts.filterFreq || 1200;
+    if (opts.filterQ) filter.Q.value = opts.filterQ;
+    tail.connect(filter);
+    tail = filter;
+  }
+
+  if (typeof opts.pan === 'number' && typeof ctx.createStereoPanner === 'function') {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = opts.pan;
+    tail.connect(panner);
+    tail = panner;
+  }
+
+  tail.connect(ctx.destination);
+  return output;
+}
+
+function playVoice(opts = {}) {
   if (!soundEnabled) return;
   try {
     const ctx = getAudioCtx();
-    const { type = 'sine', freq = 440, freq2, duration = 0.12,
-            gain = 0.18, attack = 0.005, decay = 0.04,
-            freqDecay = false } = opts;
+    const {
+      type = 'sine',
+      freq = 440,
+      freq2,
+      duration = 0.12,
+      gain = 0.14,
+      attack = 0.004,
+      decay = duration,
+      pan,
+      filterType,
+      filterFreq,
+      filterQ,
+      detune = 0,
+      drift = 0,
+    } = opts;
 
     const osc = ctx.createOscillator();
     const amp = ctx.createGain();
-    osc.connect(amp);
-    amp.connect(ctx.destination);
+    const output = createOutputChain(ctx, { pan, filterType, filterFreq, filterQ });
 
     osc.type = type;
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    if (freq2 && freqDecay) {
-      osc.frequency.exponentialRampToValueAtTime(freq2, ctx.currentTime + duration);
+    osc.frequency.setValueAtTime(Math.max(20, freq), ctx.currentTime);
+    osc.detune.setValueAtTime(detune + rand(-6, 6), ctx.currentTime);
+    if (freq2) {
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq2), ctx.currentTime + duration);
+    }
+    if (drift) {
+      osc.detune.linearRampToValueAtTime(detune + drift, ctx.currentTime + duration);
     }
 
-    amp.gain.setValueAtTime(0, ctx.currentTime);
+    amp.gain.setValueAtTime(0.0001, ctx.currentTime);
     amp.gain.linearRampToValueAtTime(gain, ctx.currentTime + attack);
-    amp.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + attack + decay);
+    amp.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + Math.max(attack + 0.02, decay));
 
+    osc.connect(amp);
+    amp.connect(output);
     osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + duration + 0.02);
-  } catch(e) {}
+    osc.stop(ctx.currentTime + duration + 0.03);
+  } catch (e) {}
+}
+
+function playNoiseBurst(opts = {}) {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioCtx();
+    const {
+      duration = 0.08,
+      gain = 0.05,
+      attack = 0.002,
+      decay = duration,
+      pan,
+      filterType = 'bandpass',
+      filterFreq = 1600,
+      filterQ = 1.2,
+    } = opts;
+
+    const buffer = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * duration)), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+
+    const src = ctx.createBufferSource();
+    const amp = ctx.createGain();
+    const output = createOutputChain(ctx, { pan, filterType, filterFreq, filterQ });
+
+    src.buffer = buffer;
+    amp.gain.setValueAtTime(0.0001, ctx.currentTime);
+    amp.gain.linearRampToValueAtTime(gain, ctx.currentTime + attack);
+    amp.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + Math.max(attack + 0.02, decay));
+
+    src.connect(amp);
+    amp.connect(output);
+    src.start(ctx.currentTime);
+    src.stop(ctx.currentTime + duration + 0.02);
+  } catch (e) {}
 }
 
 const SFX = {
   place() {
-    playTone({ type: 'triangle', freq: 520, freq2: 260, duration: 0.1,
-               gain: 0.14, attack: 0.003, decay: 0.08, freqDecay: true });
+    playVoice({
+      type: 'triangle',
+      freq: rand(500, 540),
+      freq2: rand(250, 290),
+      duration: 0.1,
+      gain: 0.08,
+      attack: 0.002,
+      decay: 0.085,
+      filterType: 'lowpass',
+      filterFreq: 2200,
+      drift: -18,
+    });
   },
   vanish() {
-    playTone({ type: 'sine', freq: 340, freq2: 120, duration: 0.22,
-               gain: 0.12, attack: 0.005, decay: 0.18, freqDecay: true });
+    playVoice({
+      type: 'triangle',
+      freq: rand(320, 360),
+      freq2: rand(95, 125),
+      duration: 0.22,
+      gain: 0.065,
+      attack: 0.004,
+      decay: 0.18,
+      filterType: 'lowpass',
+      filterFreq: 1400,
+      drift: -34,
+    });
+    playVoice({
+      type: 'sine',
+      freq: rand(180, 220),
+      freq2: rand(70, 90),
+      duration: 0.18,
+      gain: 0.045,
+      attack: 0.002,
+      decay: 0.14,
+      filterType: 'bandpass',
+      filterFreq: 900,
+      filterQ: 1.1,
+      pan: rand(-0.12, 0.12),
+    });
+    playNoiseBurst({
+      duration: 0.07,
+      gain: 0.022,
+      filterType: 'highpass',
+      filterFreq: 2100,
+      filterQ: 0.8,
+      pan: rand(-0.18, 0.18),
+    });
   },
   win() {
-    playTone({ type: 'triangle', freq: 660, duration: 0.18, gain: 0.18, attack: 0.005, decay: 0.14 });
-    setTimeout(() => playTone({ type: 'triangle', freq: 880, duration: 0.22,
-                                gain: 0.15, attack: 0.005, decay: 0.18 }), 130);
+    playVoice({
+      type: 'triangle',
+      freq: 660,
+      duration: 0.18,
+      gain: 0.1,
+      attack: 0.004,
+      decay: 0.14,
+      filterType: 'lowpass',
+      filterFreq: 2600,
+    });
+    setTimeout(() => playVoice({
+      type: 'triangle',
+      freq: 880,
+      duration: 0.22,
+      gain: 0.085,
+      attack: 0.004,
+      decay: 0.18,
+      filterType: 'lowpass',
+      filterFreq: 2800,
+    }), 130);
   },
-  combo() {
-    playTone({ type: 'square', freq: 420, duration: 0.08, gain: 0.1, attack: 0.003, decay: 0.07 });
-    setTimeout(() => playTone({ type: 'square', freq: 560, duration: 0.1,
-                                gain: 0.1, attack: 0.003, decay: 0.08 }), 70);
+  lose() {
+    playVoice({
+      type: 'triangle',
+      freq: rand(320, 350),
+      freq2: rand(170, 195),
+      duration: 0.22,
+      gain: 0.072,
+      attack: 0.003,
+      decay: 0.18,
+      filterType: 'lowpass',
+      filterFreq: 1500,
+      drift: -22,
+    });
+    setTimeout(() => playVoice({
+      type: 'sine',
+      freq: rand(180, 205),
+      freq2: rand(92, 108),
+      duration: 0.24,
+      gain: 0.05,
+      attack: 0.003,
+      decay: 0.2,
+      filterType: 'bandpass',
+      filterFreq: 820,
+      filterQ: 1.2,
+      pan: rand(-0.14, 0.14),
+      drift: -18,
+    }), 40);
+    setTimeout(() => playNoiseBurst({
+      duration: 0.08,
+      gain: 0.016,
+      filterType: 'bandpass',
+      filterFreq: 1450,
+      filterQ: 1.8,
+      pan: rand(-0.12, 0.12),
+    }), 22);
+  },
+  comboLight() {
+    playVoice({
+      type: 'triangle',
+      freq: rand(400, 430),
+      freq2: rand(520, 560),
+      duration: 0.09,
+      gain: 0.055,
+      attack: 0.002,
+      decay: 0.075,
+      filterType: 'bandpass',
+      filterFreq: 1800,
+      filterQ: 1.4,
+      pan: rand(-0.12, 0.12),
+    });
+    setTimeout(() => playVoice({
+      type: 'sine',
+      freq: rand(640, 700),
+      duration: 0.08,
+      gain: 0.04,
+      attack: 0.002,
+      decay: 0.06,
+      filterType: 'lowpass',
+      filterFreq: 2400,
+      pan: rand(-0.15, 0.15),
+    }), 42);
+  },
+  comboMedium() {
+    playVoice({
+      type: 'triangle',
+      freq: rand(300, 330),
+      freq2: rand(520, 560),
+      duration: 0.12,
+      gain: 0.065,
+      attack: 0.002,
+      decay: 0.1,
+      filterType: 'bandpass',
+      filterFreq: 1650,
+      filterQ: 1.6,
+      pan: -0.12,
+    });
+    playVoice({
+      type: 'sawtooth',
+      freq: rand(470, 520),
+      freq2: rand(680, 760),
+      duration: 0.14,
+      gain: 0.038,
+      attack: 0.002,
+      decay: 0.11,
+      filterType: 'lowpass',
+      filterFreq: 1500,
+      pan: 0.14,
+      drift: 10,
+    });
+    setTimeout(() => playNoiseBurst({
+      duration: 0.08,
+      gain: 0.022,
+      filterType: 'bandpass',
+      filterFreq: 2400,
+      filterQ: 2.2,
+      pan: rand(-0.18, 0.18),
+    }), 26);
+  },
+  comboHeavy() {
+    playVoice({
+      type: 'triangle',
+      freq: rand(220, 250),
+      freq2: rand(460, 520),
+      duration: 0.14,
+      gain: 0.075,
+      attack: 0.002,
+      decay: 0.12,
+      filterType: 'bandpass',
+      filterFreq: 1350,
+      filterQ: 1.8,
+      pan: -0.18,
+      drift: 18,
+    });
+    playVoice({
+      type: 'sawtooth',
+      freq: rand(430, 470),
+      freq2: rand(820, 900),
+      duration: 0.16,
+      gain: 0.05,
+      attack: 0.002,
+      decay: 0.13,
+      filterType: 'lowpass',
+      filterFreq: 1700,
+      pan: 0.2,
+      drift: 24,
+    });
+    setTimeout(() => playVoice({
+      type: 'sine',
+      freq: rand(720, 780),
+      duration: 0.1,
+      gain: 0.03,
+      attack: 0.001,
+      decay: 0.08,
+      filterType: 'highpass',
+      filterFreq: 2000,
+      pan: rand(-0.22, 0.22),
+    }), 36);
+    setTimeout(() => playNoiseBurst({
+      duration: 0.1,
+      gain: 0.026,
+      filterType: 'bandpass',
+      filterFreq: 2600,
+      filterQ: 2.4,
+      pan: rand(-0.22, 0.22),
+    }), 24);
+  },
+  combo(level = 'light') {
+    if (level === 'heavy') return this.comboHeavy();
+    if (level === 'medium') return this.comboMedium();
+    return this.comboLight();
   },
   click() {
-    playTone({ type: 'triangle', freq: 700, duration: 0.06, gain: 0.1, attack: 0.002, decay: 0.04 });
+    playVoice({
+      type: 'triangle',
+      freq: rand(860, 920),
+      freq2: rand(1120, 1180),
+      duration: 0.045,
+      gain: 0.034,
+      attack: 0.001,
+      decay: 0.03,
+      filterType: 'highpass',
+      filterFreq: 1400,
+      filterQ: 1.3,
+      pan: rand(-0.08, 0.08),
+    });
+    setTimeout(() => playNoiseBurst({
+      duration: 0.025,
+      gain: 0.012,
+      filterType: 'bandpass',
+      filterFreq: 3200,
+      filterQ: 3.5,
+      pan: rand(-0.1, 0.1),
+    }), 8);
   },
 };
 

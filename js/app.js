@@ -112,6 +112,540 @@ let dailyMovesLeft = null;
 let dailyTimerStartedAt = null;
 let dailyElapsedMs = 0;
 let dailyTimerInterval = null;
+let matchTimerStartedAt = null;
+let matchElapsedMs = 0;
+let resultSummaryState = '';
+let resultSummaryPlayer = '';
+let resultSummaryTitleKey = '';
+let resultFlavorLine = '';
+let lastResultFlavorLine = '';
+let resultRevealTimer = null;
+const RESULT_REVEAL_DELAY = 720;
+const VANISH_STORAGE_KEY = 'vanish-local-save';
+const VANISH_STORAGE_VERSION = 1;
+const VANISH_MATCH_HISTORY_LIMIT = 250;
+let persistentProfile = null;
+let currentMatchRecord = null;
+let currentMatchSaved = false;
+let replayPlaybackTimer = null;
+let replayFinalFocusTimer = null;
+let isReplayMode = false;
+const TITLE_RULES = [
+  {
+    key: 'merciless',
+    source: 'career',
+    matches: ctx => ctx.outcome === 'win' && ctx.stats.currentStreak >= 5,
+  },
+  {
+    key: 'rhythmBreaker',
+    source: 'match',
+    matches: ctx => ctx.outcome === 'win' && ctx.entry.opponentType === 'bot' && ctx.entry.difficulty === 'xo',
+  },
+  {
+    key: 'signalBinder',
+    source: 'career',
+    matches: ctx => ctx.outcome === 'win'
+      && ctx.entry.playerSide === 'cipher'
+      && ctx.stats.sidesPlayed.cipher >= 8
+      && ctx.stats.sidesPlayed.cipher >= ctx.stats.sidesPlayed.wraith + 3,
+  },
+  {
+    key: 'boardPhantom',
+    source: 'career',
+    matches: ctx => ctx.outcome === 'win'
+      && ctx.entry.playerSide === 'wraith'
+      && ctx.stats.sidesPlayed.wraith >= 8
+      && ctx.stats.sidesPlayed.wraith >= ctx.stats.sidesPlayed.cipher + 3,
+  },
+  {
+    key: 'challengeShade',
+    source: 'career',
+    matches: ctx => ctx.outcome === 'win'
+      && ctx.entry.gameMode === 'daily'
+      && ctx.matches.filter(match => match.outcome === 'win' && match.gameMode === 'daily').length >= 3,
+  },
+  {
+    key: 'coldblooded',
+    source: 'match',
+    matches: ctx => ctx.outcome === 'win'
+      && (ctx.entry.durationMs > 0 && ctx.entry.durationMs <= 25000 || ctx.entry.statsContext.totalTurns <= 5),
+  },
+  {
+    key: 'lastPulse',
+    source: 'match',
+    matches: ctx => ctx.outcome === 'win'
+      && ctx.entry.statsContext.totalTurns >= 7
+      && ctx.entry.durationMs <= 65000,
+  },
+  {
+    key: 'silentHunter',
+    source: 'match',
+    matches: ctx => ctx.outcome === 'win'
+      && (ctx.entry.durationMs >= 90000 || ctx.entry.statsContext.totalTurns >= 8),
+  },
+];
+
+function safeParseJSON(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function createDefaultPersistentProfile() {
+  return {
+    schemaVersion: VANISH_STORAGE_VERSION,
+    stats: {
+      totalMatches: 0,
+      totalWins: 0,
+      totalLosses: 0,
+      winRate: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      totalDurationMs: 0,
+      averageMatchDurationMs: 0,
+      sidesPlayed: { cipher: 0, wraith: 0 },
+      modesPlayed: { duel: 0, ranked: 0, daily: 0 },
+      difficultiesPlayed: { baby: 0, norm: 0, xo: 0 },
+      updatedAt: null,
+    },
+    titles: {
+      unlocked: [],
+      lastShownKey: null,
+      updatedAt: null,
+    },
+    matches: [],
+  };
+}
+
+function normalizeCounterMap(raw, keys) {
+  return keys.reduce((acc, key) => {
+    const value = Number(raw && raw[key]);
+    acc[key] = Number.isFinite(value) && value >= 0 ? value : 0;
+    return acc;
+  }, {});
+}
+
+function normalizePersistentProfile(raw) {
+  const base = createDefaultPersistentProfile();
+  if (!raw || typeof raw !== 'object') return base;
+
+  const stats = raw.stats && typeof raw.stats === 'object' ? raw.stats : {};
+  const totalMatches = Number(stats.totalMatches);
+  const totalWins = Number(stats.totalWins);
+  const totalLosses = Number(stats.totalLosses);
+  const totalDurationMs = Number(stats.totalDurationMs);
+  const currentStreak = Number(stats.currentStreak);
+  const bestStreak = Number(stats.bestStreak);
+
+  base.stats.totalMatches = Number.isFinite(totalMatches) && totalMatches >= 0 ? totalMatches : 0;
+  base.stats.totalWins = Number.isFinite(totalWins) && totalWins >= 0 ? totalWins : 0;
+  base.stats.totalLosses = Number.isFinite(totalLosses) && totalLosses >= 0 ? totalLosses : 0;
+  base.stats.totalDurationMs = Number.isFinite(totalDurationMs) && totalDurationMs >= 0 ? totalDurationMs : 0;
+  base.stats.currentStreak = Number.isFinite(currentStreak) && currentStreak >= 0 ? currentStreak : 0;
+  base.stats.bestStreak = Number.isFinite(bestStreak) && bestStreak >= 0 ? bestStreak : 0;
+  base.stats.sidesPlayed = normalizeCounterMap(stats.sidesPlayed, ['cipher', 'wraith']);
+  base.stats.modesPlayed = normalizeCounterMap(stats.modesPlayed, ['duel', 'ranked', 'daily']);
+  base.stats.difficultiesPlayed = normalizeCounterMap(stats.difficultiesPlayed, ['baby', 'norm', 'xo']);
+  base.stats.updatedAt = typeof stats.updatedAt === 'string' ? stats.updatedAt : null;
+
+  if (base.stats.totalMatches > 0) {
+    base.stats.winRate = Number((base.stats.totalWins / base.stats.totalMatches).toFixed(4));
+    base.stats.averageMatchDurationMs = Math.round(base.stats.totalDurationMs / base.stats.totalMatches);
+  }
+
+  base.matches = Array.isArray(raw.matches)
+    ? raw.matches.filter(entry => entry && typeof entry === 'object').slice(0, VANISH_MATCH_HISTORY_LIMIT)
+    : [];
+
+  const titles = raw.titles && typeof raw.titles === 'object' ? raw.titles : {};
+  base.titles.unlocked = Array.isArray(titles.unlocked)
+    ? titles.unlocked
+        .filter(entry => entry && typeof entry === 'object' && typeof entry.key === 'string')
+        .map(entry => ({
+          key: entry.key,
+          source: entry.source === 'career' ? 'career' : 'match',
+          unlockedAt: typeof entry.unlockedAt === 'string' ? entry.unlockedAt : null,
+          lastAwardedAt: typeof entry.lastAwardedAt === 'string' ? entry.lastAwardedAt : null,
+        }))
+    : [];
+  base.titles.lastShownKey = typeof titles.lastShownKey === 'string' ? titles.lastShownKey : null;
+  base.titles.updatedAt = typeof titles.updatedAt === 'string' ? titles.updatedAt : null;
+
+  return base;
+}
+
+function loadPersistentProfile() {
+  if (typeof window === 'undefined' || !window.localStorage) return createDefaultPersistentProfile();
+  const raw = safeParseJSON(window.localStorage.getItem(VANISH_STORAGE_KEY));
+  return normalizePersistentProfile(raw);
+}
+
+function savePersistentProfile() {
+  if (!persistentProfile || typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(VANISH_STORAGE_KEY, JSON.stringify(persistentProfile));
+  } catch {
+    // Ignore storage quota or privacy-mode failures and keep gameplay unaffected.
+  }
+}
+
+function cloneBoardState(state) {
+  return Array.isArray(state) ? state.slice() : Array(9).fill(null);
+}
+
+function cloneMarksState(state) {
+  return {
+    cipher: Array.isArray(state && state.cipher) ? state.cipher.map(mark => ({ cell: mark.cell, histId: mark.histId || 0 })) : [],
+    wraith: Array.isArray(state && state.wraith) ? state.wraith.map(mark => ({ cell: mark.cell, histId: mark.histId || 0 })) : [],
+  };
+}
+
+function createMatchSnapshot() {
+  return {
+    board: cloneBoardState(board),
+    marks: cloneMarksState(marks),
+    currentPlayer,
+  };
+}
+
+function createMatchRecordId() {
+  return `match_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function beginMatchRecord(extra = {}) {
+  currentMatchSaved = false;
+  currentMatchRecord = {
+    id: createMatchRecordId(),
+    startedAt: new Date().toISOString(),
+    gameMode,
+    opponentType,
+    botDifficulty: opponentType === 'bot' ? selectedBotDifficulty : null,
+    playerSide: currentUserFaction,
+    opponentSide: oppositeFaction(currentUserFaction),
+    currentUserName,
+    playerNames: {
+      cipher: nicknames.cipher || '',
+      wraith: nicknames.wraith || '',
+    },
+    round: {
+      current: currentRoundNumber(),
+      total: matchRoundTotal,
+    },
+    initialState: createMatchSnapshot(),
+    daily: gameMode === 'daily' && dailyChallenge
+      ? {
+          date: dailyChallenge.dateStr,
+          seed: dailyChallenge.seed,
+          moveLimit: dailyChallenge.moveLimit,
+          objective: dailyChallenge.objective,
+          preBoard: cloneBoardState(dailyChallenge.preBoard),
+        }
+      : null,
+    ...extra,
+  };
+}
+
+function resetMatchRecord() {
+  currentMatchRecord = null;
+  currentMatchSaved = false;
+}
+
+function buildMatchHistoryEntry(outcome, winnerFaction = null) {
+  const nowIso = new Date().toISOString();
+  const durationMs = Math.max(0, matchElapsedMs || 0);
+  const turns = historyData.map((entry, idx) => ({
+    turn: idx + 1,
+    id: entry.id,
+    player: entry.player,
+    cell: entry.cell,
+    label: entry.label,
+    erased: Boolean(entry.erased),
+    erasedOnTurn: entry.erasedOnTurn || null,
+  }));
+
+  return {
+    schemaVersion: VANISH_STORAGE_VERSION,
+    id: currentMatchRecord?.id || createMatchRecordId(),
+    savedAt: nowIso,
+    startedAt: currentMatchRecord?.startedAt || nowIso,
+    gameMode,
+    opponentType,
+    difficulty: opponentType === 'bot' ? selectedBotDifficulty : null,
+    outcome,
+    winnerFaction,
+    winnerName: winnerFaction ? playerDisplayName(winnerFaction) : null,
+    playerSide: currentUserFaction,
+    opponentSide: oppositeFaction(currentUserFaction),
+    durationMs,
+    durationText: formatMatchTime(durationMs),
+    timestamp: nowIso,
+    date: nowIso.slice(0, 10),
+    round: currentMatchRecord?.round || { current: currentRoundNumber(), total: matchRoundTotal },
+    playerNames: currentMatchRecord?.playerNames || {
+      cipher: nicknames.cipher || '',
+      wraith: nicknames.wraith || '',
+    },
+    currentUserName,
+    initialState: currentMatchRecord?.initialState || createMatchSnapshot(),
+    finalState: createMatchSnapshot(),
+    turns,
+    statsContext: {
+      totalTurns: turns.length,
+      score: { cipher: score.cipher, wraith: score.wraith },
+      resultSummaryState,
+    },
+    daily: currentMatchRecord?.daily || null,
+    title: null,
+  };
+}
+
+function getTitleText(key) {
+  return key ? (t().titles?.[key] || '') : '';
+}
+
+function unlockTitle(key, source, timestamp) {
+  if (!persistentProfile) return;
+  const unlocked = persistentProfile.titles.unlocked;
+  const existing = unlocked.find(entry => entry.key === key);
+  if (existing) {
+    existing.source = source === 'career' ? 'career' : existing.source;
+    existing.lastAwardedAt = timestamp;
+    return existing;
+  }
+  const record = {
+    key,
+    source: source === 'career' ? 'career' : 'match',
+    unlockedAt: timestamp,
+    lastAwardedAt: timestamp,
+  };
+  unlocked.push(record);
+  return record;
+}
+
+function resolveFallbackTitle(entry) {
+  if (!persistentProfile || !persistentProfile.titles.unlocked.length) return '';
+  const unlocked = persistentProfile.titles.unlocked.slice().sort((a, b) => {
+    const aTime = Date.parse(a.lastAwardedAt || a.unlockedAt || 0);
+    const bTime = Date.parse(b.lastAwardedAt || b.unlockedAt || 0);
+    return bTime - aTime;
+  });
+
+  if (entry.playerSide === 'cipher' && unlocked.some(item => item.key === 'signalBinder')) return 'signalBinder';
+  if (entry.playerSide === 'wraith' && unlocked.some(item => item.key === 'boardPhantom')) return 'boardPhantom';
+  return unlocked[0]?.key || '';
+}
+
+function resolveEntryTitles(entry, statsSnapshot, prospectiveMatches) {
+  const context = {
+    entry,
+    outcome: entry.outcome,
+    stats: statsSnapshot,
+    matches: prospectiveMatches,
+  };
+  const qualified = TITLE_RULES.filter(rule => rule.matches(context));
+  const awardedKeys = qualified.map(rule => rule.key);
+  const selectedRule = qualified[0] || null;
+  const selectedKey = selectedRule?.key || resolveFallbackTitle(entry);
+  const selectedSource = selectedRule?.source || (selectedKey ? 'identity' : null);
+  return { qualified, awardedKeys, selectedKey, selectedSource };
+}
+
+function persistCompletedMatch(outcome, winnerFaction = null) {
+  if (currentMatchSaved) return;
+  if (!persistentProfile) persistentProfile = loadPersistentProfile();
+
+  const entry = buildMatchHistoryEntry(outcome, winnerFaction);
+  const stats = persistentProfile.stats;
+  stats.totalMatches += 1;
+  if (outcome === 'win') {
+    stats.totalWins += 1;
+    stats.currentStreak += 1;
+    stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
+  } else {
+    stats.totalLosses += 1;
+    stats.currentStreak = 0;
+  }
+  stats.totalDurationMs += Math.max(0, matchElapsedMs || 0);
+  stats.averageMatchDurationMs = stats.totalMatches > 0
+    ? Math.round(stats.totalDurationMs / stats.totalMatches)
+    : 0;
+  stats.winRate = stats.totalMatches > 0
+    ? Number((stats.totalWins / stats.totalMatches).toFixed(4))
+    : 0;
+  if (stats.sidesPlayed[currentUserFaction] !== undefined) stats.sidesPlayed[currentUserFaction] += 1;
+  if (stats.modesPlayed[gameMode] !== undefined) stats.modesPlayed[gameMode] += 1;
+  if (opponentType === 'bot' && gameMode === 'duel' && stats.difficultiesPlayed[selectedBotDifficulty] !== undefined) {
+    stats.difficultiesPlayed[selectedBotDifficulty] += 1;
+  }
+  stats.updatedAt = entry.savedAt;
+
+  const prospectiveMatches = [entry, ...persistentProfile.matches].slice(0, VANISH_MATCH_HISTORY_LIMIT);
+  const titleResolution = resolveEntryTitles(entry, stats, prospectiveMatches);
+  titleResolution.qualified.forEach(rule => unlockTitle(rule.key, rule.source, entry.savedAt));
+  entry.title = titleResolution.selectedKey
+    ? { key: titleResolution.selectedKey, source: titleResolution.selectedSource }
+    : null;
+
+  persistentProfile.matches.unshift(entry);
+  if (persistentProfile.matches.length > VANISH_MATCH_HISTORY_LIMIT) {
+    persistentProfile.matches.length = VANISH_MATCH_HISTORY_LIMIT;
+  }
+  persistentProfile.titles.lastShownKey = titleResolution.selectedKey || persistentProfile.titles.lastShownKey || null;
+  persistentProfile.titles.updatedAt = entry.savedAt;
+
+  currentMatchSaved = true;
+  savePersistentProfile();
+  updateReplayButtonState();
+  return entry;
+}
+
+function cancelReplayPlayback() {
+  if (replayPlaybackTimer !== null) {
+    clearTimeout(replayPlaybackTimer);
+    replayPlaybackTimer = null;
+  }
+  if (replayFinalFocusTimer !== null) {
+    clearTimeout(replayFinalFocusTimer);
+    replayFinalFocusTimer = null;
+  }
+  isReplayMode = false;
+  updateReplayButtonState();
+}
+
+function getLatestReplayEntry() {
+  return persistentProfile?.matches?.[0] || null;
+}
+
+function updateReplayButtonState() {
+  const btn = document.getElementById('btn-replay');
+  if (!btn) return;
+  const enabled = Boolean(getLatestReplayEntry()) && !isReplayMode;
+  btn.disabled = !enabled;
+  btn.classList.toggle('is-disabled', !enabled);
+  btn.setAttribute('aria-disabled', String(!enabled));
+}
+
+function setReplayStatus(message, color = 'var(--muted)') {
+  statusEl.textContent = message;
+  statusEl.style.color = color;
+}
+
+function restoreReplayInitialState(entry) {
+  cancelBotMove();
+  clearAllGhosts();
+  comboText.classList.remove('show');
+  clearTimeout(comboTimer);
+  histStrip.innerHTML = '';
+  initState();
+  board = cloneBoardState(entry.initialState?.board);
+  marks = cloneMarksState(entry.initialState?.marks);
+  currentPlayer = entry.initialState?.currentPlayer || 'cipher';
+  historyCounter = 0;
+  historyData = [];
+  gameOver = true;
+  isAnimating = true;
+  currentUserFaction = entry.playerSide || currentUserFaction;
+  botControlledFaction = entry.opponentType === 'bot' ? entry.opponentSide : null;
+  nicknames = {
+    cipher: entry.playerNames?.cipher || nicknames.cipher,
+    wraith: entry.playerNames?.wraith || nicknames.wraith,
+  };
+  buildBoard();
+  render();
+  updatePanelNames();
+  updateModeBadge();
+}
+
+function playReplayTurn(entry, turnIndex, replayIdMap, onDone) {
+  if (turnIndex >= entry.turns.length) {
+    onDone();
+    return;
+  }
+
+  const turn = entry.turns[turnIndex];
+  const removedTurn = entry.turns.find(item => item.erasedOnTurn === turn.turn);
+  const removalDelay = removedTurn ? 320 : 0;
+
+  if (removedTurn) {
+    const vanCell = removedTurn.cell;
+    const oldCellEl = cellEl(vanCell);
+    const replayMark = oldCellEl.querySelector('.cell-mark');
+    board[vanCell] = null;
+    marks[removedTurn.player] = marks[removedTurn.player].filter(mark => mark.cell !== vanCell);
+    const replayHistId = replayIdMap.get(removedTurn.id);
+    if (replayHistId) markHistoryErased(replayHistId);
+    oldCellEl.style.setProperty('--vanish-glow', removedTurn.player === 'cipher' ? '#00eeff66' : '#ff00cc66');
+    oldCellEl.classList.add('vanish-cell');
+    if (replayMark) replayMark.classList.add('vanishing');
+    if (typeof SFX !== 'undefined' && typeof SFX.vanish === 'function') SFX.vanish();
+    replayPlaybackTimer = setTimeout(() => {
+      oldCellEl.innerHTML = '';
+      oldCellEl.className = 'cell';
+      oldCellEl.style.removeProperty('--vanish-glow');
+      oldCellEl.tabIndex = 0;
+    }, 300);
+  }
+
+  replayPlaybackTimer = setTimeout(() => {
+    board[turn.cell] = turn.player;
+    const replayHistId = addHistory(turn.player, turn.cell);
+    replayIdMap.set(turn.id, replayHistId);
+    marks[turn.player].push({ cell: turn.cell, histId: replayHistId });
+    const targetCell = cellEl(turn.cell);
+    targetCell.classList.add('occupied');
+    targetCell.insertBefore(createMarkElement(turn.player, 'placed'), targetCell.firstChild);
+    if (typeof SFX !== 'undefined' && typeof SFX.place === 'function') SFX.place();
+    currentPlayer = turn.player === 'cipher' ? 'wraith' : 'cipher';
+    render();
+    setReplayStatus(`${t().replayRunning} · ${turn.turn}/${entry.turns.length}`, turn.player === 'cipher' ? 'var(--cipher)' : 'var(--wraith)');
+    replayPlaybackTimer = setTimeout(() => playReplayTurn(entry, turnIndex + 1, replayIdMap, onDone), 520);
+  }, removalDelay + 220);
+}
+
+function finishReplayPlayback(entry) {
+  const finalBoard = cloneBoardState(entry.finalState?.board);
+  if (finalBoard.length === 9) board = finalBoard;
+  marks = cloneMarksState(entry.finalState?.marks);
+  render();
+
+  const winnerLine = entry.winnerFaction ? checkWinOnBoard(board, entry.winnerFaction) : null;
+  if (winnerLine && entry.winnerFaction) {
+    highlightWin(winnerLine, entry.winnerFaction);
+    setReplayStatus(t().replayFinal, entry.winnerFaction === 'cipher' ? 'var(--cipher)' : 'var(--wraith)');
+  } else {
+    setReplayStatus(t().replayFinal, 'var(--warn)');
+  }
+
+  replayFinalFocusTimer = setTimeout(() => {
+    isReplayMode = false;
+    isAnimating = false;
+    winOverlay.classList.add('show');
+    updateReplayButtonState();
+  }, 980);
+}
+
+function playReplayFromEntry(entry) {
+  if (!entry || isReplayMode) return;
+  cancelReplayPlayback();
+  isReplayMode = true;
+  updateReplayButtonState();
+  winOverlay.classList.remove('show');
+  restoreReplayInitialState(entry);
+  setReplayStatus(t().replayRunning, '#9fdcff');
+  const replayIdMap = new Map();
+  replayPlaybackTimer = setTimeout(() => {
+    playReplayTurn(entry, 0, replayIdMap, () => finishReplayPlayback(entry));
+  }, 340);
+}
+
+function playLatestMatchReplay() {
+  const entry = getLatestReplayEntry();
+  if (!entry) return;
+  playReplayFromEntry(entry);
+}
 
 function formatDailyTime(ms, includeTenths = false) {
   const safeMs = Math.max(0, ms || 0);
@@ -121,6 +655,287 @@ function formatDailyTime(ms, includeTenths = false) {
   if (!includeTenths) return `${minutes}:${seconds}`;
   const tenths = Math.floor((safeMs % 1000) / 100);
   return `${minutes}:${seconds}.${tenths}`;
+}
+
+function formatMatchTime(ms) {
+  return formatDailyTime(ms, false);
+}
+
+function formatExportDateLabel() {
+  return todayString().replace(/-/g, '.');
+}
+
+function getModeSummaryText() {
+  if (gameMode === 'daily') return t().modeDaily;
+  if (gameMode === 'ranked') return t().modeRanked;
+  return t().modeDuel;
+}
+
+function getDifficultySummaryText() {
+  if (selectedBotDifficulty === 'baby') return t().botBaby;
+  if (selectedBotDifficulty === 'norm') return t().botNorm;
+  return t().botXO;
+}
+
+function getResultFlavorText() {
+  return resultFlavorLine || (resultSummaryState === 'loss' ? t().exportFlavorLoss : t().exportFlavorWin);
+}
+
+function pickResultFlavorLine(mode, playerName = '') {
+  const pool = mode === 'loss' ? t().resultFlavorLosses : t().resultFlavorWins;
+  if (!Array.isArray(pool) || !pool.length) return '';
+  if (pool.length === 1) {
+    lastResultFlavorLine = pool[0];
+    return pool[0].replaceAll('{name}', playerName);
+  }
+  let pick = pool[Math.floor(Math.random() * pool.length)];
+  while (pick === lastResultFlavorLine) {
+    pick = pool[Math.floor(Math.random() * pool.length)];
+  }
+  lastResultFlavorLine = pick;
+  return pick.replaceAll('{name}', playerName);
+}
+
+function updateResultFlavorText() {
+  const subtitleEl = document.getElementById('win-subtitle');
+  if (!subtitleEl) return;
+  subtitleEl.textContent = resultFlavorLine || '';
+}
+
+function getExportSummaryRows() {
+  const rows = [
+    { label: t().exportLabelPlayer, value: resultSummaryPlayer || '' },
+  ];
+
+  if (resultSummaryTitleKey) {
+    rows.push({ label: t().exportLabelTitle, value: getTitleText(resultSummaryTitleKey) });
+  }
+
+  rows.push(
+    { label: t().exportLabelMode, value: getModeSummaryText() },
+    { label: t().exportLabelTime, value: matchElapsedMs > 0 ? formatMatchTime(matchElapsedMs) : '--:--' },
+  );
+
+  if (opponentType === 'bot' && gameMode === 'duel') {
+    rows.push({ label: t().exportLabelDifficulty, value: getDifficultySummaryText() });
+  }
+
+  rows.push({ label: t().exportDate.toUpperCase(), value: formatExportDateLabel() });
+  return rows;
+}
+
+function updateResultSummary() {
+  const stateEl = document.getElementById('result-summary-state');
+  const playerEl = document.getElementById('result-summary-player');
+  const titleRow = document.getElementById('result-summary-row-title');
+  const titleEl = document.getElementById('result-summary-title');
+  const modeEl = document.getElementById('result-summary-mode');
+  const difficultyRow = document.getElementById('result-summary-row-difficulty');
+  const difficultyEl = document.getElementById('result-summary-difficulty');
+  if (!stateEl || !playerEl || !titleRow || !titleEl || !modeEl || !difficultyRow || !difficultyEl) return;
+
+  const hasSummary = Boolean(resultSummaryState);
+  stateEl.textContent = hasSummary
+    ? (resultSummaryState === 'loss' ? t().resultDefeat : t().resultVictory)
+    : '';
+  playerEl.textContent = hasSummary ? (resultSummaryPlayer || '') : '';
+  titleRow.style.display = hasSummary && resultSummaryTitleKey ? '' : 'none';
+  titleEl.textContent = hasSummary ? getTitleText(resultSummaryTitleKey) : '';
+  modeEl.textContent = hasSummary ? getModeSummaryText() : '';
+
+  const showDifficulty = hasSummary && opponentType === 'bot' && gameMode === 'duel';
+  difficultyRow.style.display = showDifficulty ? '' : 'none';
+  difficultyEl.textContent = showDifficulty ? getDifficultySummaryText() : '';
+}
+
+function updateMatchResultText() {
+  const el = document.getElementById('match-result-time');
+  if (!el) return;
+  el.textContent = gameOver && matchElapsedMs > 0
+    ? formatMatchTime(matchElapsedMs)
+    : '';
+}
+
+function clearMatchTimer() {
+  cancelReplayPlayback();
+  cancelResultReveal();
+  matchTimerStartedAt = null;
+  matchElapsedMs = 0;
+  resultSummaryState = '';
+  resultSummaryPlayer = '';
+  resultSummaryTitleKey = '';
+  resultFlavorLine = '';
+  resetMatchRecord();
+  updateResultSummary();
+  updateResultFlavorText();
+  updateMatchResultText();
+}
+
+function startMatchTimer() {
+  matchTimerStartedAt = Date.now();
+  matchElapsedMs = 0;
+  updateMatchResultText();
+}
+
+function stopMatchTimer() {
+  if (matchTimerStartedAt !== null) {
+    matchElapsedMs = Date.now() - matchTimerStartedAt;
+    matchTimerStartedAt = null;
+  }
+  updateMatchResultText();
+}
+
+function cancelResultReveal() {
+  if (resultRevealTimer !== null) {
+    clearTimeout(resultRevealTimer);
+    resultRevealTimer = null;
+  }
+}
+
+function scheduleResultReveal(callback, delay = RESULT_REVEAL_DELAY) {
+  cancelResultReveal();
+  resultRevealTimer = setTimeout(() => {
+    resultRevealTimer = null;
+    callback();
+  }, delay);
+}
+
+function exportResultCard() {
+  if (!gameOver || !resultSummaryState) return;
+
+  const canvas = document.createElement('canvas');
+  const scale = Math.max(2, Math.min(3, window.devicePixelRatio || 1));
+  const width = 1080;
+  const height = 1350;
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.scale(scale, scale);
+
+  const isLoss = resultSummaryState === 'loss';
+  const accent = isLoss ? '#a9b9d3' : '#6feeff';
+  const accentSoft = isLoss ? '#7f8da8' : '#00eeff';
+  const accentHot = isLoss ? '#d7e2f5' : '#8ff4ff';
+  const rows = getExportSummaryRows();
+  const titleText = resultSummaryState === 'loss' ? t().resultDefeat : t().resultVictory;
+  const playerText = resultSummaryPlayer || 'VANISH';
+  const flavorText = getResultFlavorText();
+
+  const bg = ctx.createLinearGradient(0, 0, 0, height);
+  bg.addColorStop(0, '#090b12');
+  bg.addColorStop(0.55, '#0a1018');
+  bg.addColorStop(1, '#05070d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
+
+  const flare = ctx.createRadialGradient(width * 0.72, 160, 20, width * 0.72, 160, 520);
+  flare.addColorStop(0, isLoss ? 'rgba(190, 207, 230, 0.18)' : 'rgba(0, 238, 255, 0.22)');
+  flare.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = flare;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 12; i++) {
+    const y = 120 + i * 96;
+    ctx.beginPath();
+    ctx.moveTo(70, y);
+    ctx.lineTo(width - 70, y);
+    ctx.stroke();
+  }
+
+  const cardX = 86;
+  const cardY = 84;
+  const cardW = width - 172;
+  const cardH = height - 168;
+  const cardGradient = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH);
+  cardGradient.addColorStop(0, 'rgba(15, 20, 32, 0.94)');
+  cardGradient.addColorStop(1, 'rgba(8, 12, 20, 0.97)');
+  ctx.fillStyle = cardGradient;
+  ctx.fillRect(cardX, cardY, cardW, cardH);
+  ctx.strokeStyle = isLoss ? 'rgba(166, 182, 204, 0.3)' : 'rgba(0, 238, 255, 0.28)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cardX, cardY, cardW, cardH);
+
+  ctx.strokeStyle = isLoss ? 'rgba(214, 225, 242, 0.18)' : 'rgba(111, 238, 255, 0.18)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(cardX + 16, cardY + 16, cardW - 32, cardH - 32);
+
+  ctx.fillStyle = '#eef6ff';
+  ctx.font = '48px "Bebas Neue", sans-serif';
+  ctx.fillText('VANISH', cardX + 44, cardY + 66);
+
+  ctx.fillStyle = accent;
+  ctx.font = '30px "Space Mono", monospace';
+  ctx.fillText(formatExportDateLabel(), cardX + cardW - 210, cardY + 62);
+
+  ctx.fillStyle = accentHot;
+  ctx.shadowColor = isLoss ? 'rgba(215, 226, 245, 0.22)' : 'rgba(0, 238, 255, 0.28)';
+  ctx.shadowBlur = 22;
+  ctx.font = '110px "Bebas Neue", sans-serif';
+  ctx.fillText(titleText, cardX + 40, cardY + 208);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '68px "Bebas Neue", sans-serif';
+  ctx.fillText(playerText, cardX + 40, cardY + 292);
+
+  ctx.fillStyle = '#8ca0bf';
+  ctx.font = '28px "Space Mono", monospace';
+  ctx.fillText(flavorText.toUpperCase(), cardX + 42, cardY + 336);
+
+  const summaryX = cardX + 40;
+  const summaryY = cardY + 392;
+  const summaryW = cardW - 80;
+  const summaryH = 90 + rows.length * 82;
+  const summaryGradient = ctx.createLinearGradient(summaryX, summaryY, summaryX, summaryY + summaryH);
+  summaryGradient.addColorStop(0, 'rgba(18, 25, 39, 0.96)');
+  summaryGradient.addColorStop(1, 'rgba(10, 14, 24, 0.98)');
+  ctx.fillStyle = summaryGradient;
+  ctx.fillRect(summaryX, summaryY, summaryW, summaryH);
+  ctx.strokeStyle = isLoss ? 'rgba(142, 158, 182, 0.24)' : 'rgba(0, 238, 255, 0.18)';
+  ctx.strokeRect(summaryX, summaryY, summaryW, summaryH);
+
+  rows.forEach((row, index) => {
+    const y = summaryY + 78 + index * 82;
+    if (index > 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath();
+      ctx.moveTo(summaryX + 24, y - 42);
+      ctx.lineTo(summaryX + summaryW - 24, y - 42);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#73819b';
+    ctx.font = '25px "Space Mono", monospace';
+    ctx.fillText(row.label, summaryX + 28, y);
+    ctx.fillStyle = '#edf5ff';
+    ctx.font = '44px "Bebas Neue", sans-serif';
+    const value = String(row.value || '');
+    const measured = ctx.measureText(value).width;
+    ctx.fillText(value, summaryX + summaryW - 28 - measured, y + 4);
+  });
+
+  ctx.strokeStyle = accentSoft;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cardX + 40, cardY + cardH - 182);
+  ctx.lineTo(cardX + cardW - 40, cardY + cardH - 182);
+  ctx.stroke();
+
+  ctx.fillStyle = accent;
+  ctx.font = '26px "Space Mono", monospace';
+  ctx.fillText('NEON TACTICAL RECORD', cardX + 40, cardY + cardH - 130);
+  ctx.fillStyle = '#71819b';
+  ctx.fillText('xo.walterpng.github.io/vanish', cardX + 40, cardY + cardH - 84);
+
+  const link = document.createElement('a');
+  const safeName = (resultSummaryPlayer || 'vanish').toLowerCase().replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'vanish';
+  link.download = `vanish-${safeName}-${formatExportDateLabel()}.png`;
+  link.href = canvas.toDataURL('image/png');
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 function updateDailyResultText(mode = 'win') {
@@ -193,6 +1008,7 @@ function startDailyChallenge() {
   if (typeof ensureMusicFromUserGesture === 'function') ensureMusicFromUserGesture();
   stopDailyTimer();
   dailyElapsedMs = 0;
+  clearMatchTimer();
   document.getElementById('daily-info-overlay').classList.remove('show');
   document.getElementById('setup-overlay').classList.remove('show');
   const raw1 = document.getElementById('input-p1').value.trim();
@@ -216,10 +1032,7 @@ function startDailyChallenge() {
     preMarks[owner].push(idx);
     const cell = cellEl(idx);
     cell.classList.add('occupied');
-    const wrap = document.createElement('div');
-    wrap.className = 'cell-mark';
-    wrap.innerHTML = owner === 'cipher' ? cipherSVG('#00eeff') : wraithSVG('#ff00cc');
-    cell.insertBefore(wrap, cell.firstChild);
+    cell.insertBefore(createMarkElement(owner), cell.firstChild);
   });
   marks = {
     cipher: preMarks.cipher.map(c => ({ cell: c, histId: 0 })),
@@ -234,6 +1047,8 @@ function startDailyChallenge() {
   clearAllGhosts();
   updateDailyMovesUI();
   updateDailyResultText();
+  startMatchTimer();
+  beginMatchRecord();
   statusEl.textContent = t().movesFirst(playerDisplayName('cipher'));
   statusEl.style.color  = 'var(--cipher)';
   cellEl(0).focus();
@@ -480,6 +1295,15 @@ function updateAgainButtonLabel() {
   btn.textContent = hasMoreRounds() ? t().nextRound : t().playAgain;
 }
 
+function setResultPresentation(mode) {
+  const isLoss = mode === 'loss';
+  winOverlay.classList.toggle('is-loss', isLoss);
+  winOverlay.classList.toggle('is-win', !isLoss);
+  if (winStateEl) {
+    winStateEl.textContent = isLoss ? t().resultDefeat : t().resultVictory;
+  }
+}
+
 function updatePanelNames() {
   const nickC = document.getElementById('panel-nick-cipher');
   const nickW = document.getElementById('panel-nick-wraith');
@@ -519,6 +1343,7 @@ function initState() {
 const boardEl    = document.getElementById('board');
 const statusEl   = document.getElementById('status-msg');
 const winOverlay = document.getElementById('win-overlay');
+const winStateEl = document.getElementById('win-state');
 const winTitle   = document.getElementById('win-title');
 const winSym     = document.getElementById('win-faction-symbol');
 const scoreDisp  = document.getElementById('score-display');
@@ -526,11 +1351,23 @@ const histStrip  = document.getElementById('history-strip');
 const scoreCEl   = document.getElementById('score-c');
 const scoreWEl   = document.getElementById('score-w');
 const comboText  = document.getElementById('combo-text');
+const comboTitleEl = document.getElementById('combo-title');
+const comboMessageEl = document.getElementById('combo-message');
 
 const cellLabel = i => COL_LABELS[i % 3] + ROW_LABELS[Math.floor(i / 3)];
 const cellEl    = i => boardEl.children[i];
+const markClass = player => player === 'cipher' ? 'cipher-mark' : 'wraith-mark';
+
+function createMarkElement(player, extraClass = '') {
+  const wrap = document.createElement('div');
+  wrap.className = ['cell-mark', markClass(player), extraClass].filter(Boolean).join(' ');
+  wrap.innerHTML = player === 'cipher' ? cipherSVG('#00eeff') : wraithSVG('#ff00cc');
+  return wrap;
+}
 
 let comboTimer = null;
+let lastComboTitle = '';
+let lastComboDestroyVariant = '';
 let userNavigating = false; // true once the user has interacted with keyboard nav
 
 // Track keyboard-initiated focus so ghost only shows on deliberate nav, not programmatic .focus()
@@ -538,14 +1375,84 @@ document.addEventListener('keydown', () => { userNavigating = true; }, { passive
 document.addEventListener('pointerdown', () => { userNavigating = false; }, { passive: true });
 
 // ─── COMBO BANNER ─────────────────────────────────────────────────────────────
-function showCombo(msg, color) {
+function pickRandomComboTitle() {
+  const pool = Array.isArray(t().comboTitles) ? t().comboTitles : [];
+  if (!pool.length) return '';
+  if (pool.length === 1) return pool[0];
+  let pick = pool[Math.floor(Math.random() * pool.length)];
+  while (pick === lastComboTitle) {
+    pick = pool[Math.floor(Math.random() * pool.length)];
+  }
+  lastComboTitle = pick;
+  return pick;
+}
+
+function showCombo(msg, color, options = {}) {
   clearTimeout(comboTimer);
-  comboText.textContent      = msg;
+  const title = options.title === undefined
+    ? ''
+    : (options.title || pickRandomComboTitle());
+  comboTitleEl.textContent   = title;
+  comboTitleEl.style.display = title ? '' : 'none';
+  comboMessageEl.textContent = msg;
   comboText.style.color      = color || '#fff';
   comboText.style.textShadow = `0 0 12px ${color || '#fff'}88`;
   comboText.classList.add('show');
-  SFX.combo();
+  const comboSound = options.sound || 'light';
+  if (comboSound && typeof SFX !== 'undefined' && typeof SFX.combo === 'function') {
+    SFX.combo(comboSound);
+  }
   comboTimer = setTimeout(() => comboText.classList.remove('show'), 1800);
+}
+
+function getWinThreatsOnBoard(boardState, player) {
+  const threats = new Set();
+  WIN_LINES.forEach(line => {
+    const owned = line.filter(i => boardState[i] === player);
+    const empties = line.filter(i => boardState[i] === null);
+    if (owned.length === 2 && empties.length === 1) threats.add(empties[0]);
+  });
+  return threats;
+}
+
+function pickComboDestroyVariant(kind) {
+  const pools = {
+    intercept: ['signal-burst', 'phantom-ripple'],
+    doubleThreat: ['neon-fracture', 'echo-split'],
+    overdrive: ['void-collapse', 'overdrive-pulse'],
+  };
+  const pool = pools[kind] || [];
+  if (!pool.length) return '';
+  if (pool.length === 1) return pool[0];
+  let pick = pool[Math.floor(Math.random() * pool.length)];
+  while (pick === lastComboDestroyVariant) {
+    pick = pool[Math.floor(Math.random() * pool.length)];
+  }
+  lastComboDestroyVariant = pick;
+  return pick;
+}
+
+function predictComboDestroyVariant(player, placedCell, oppThreatsBeforeMove) {
+  const simulation = simulateMove(player, placedCell);
+  if (!simulation) return '';
+  const opp = player === 'cipher' ? 'wraith' : 'cipher';
+
+  if (simulation.winner === player) {
+    return pickComboDestroyVariant('overdrive');
+  }
+
+  if (oppThreatsBeforeMove.has(placedCell)) {
+    const stillThreats = getWinThreatsOnBoard(simulation.boardState, opp);
+    if (stillThreats.size < oppThreatsBeforeMove.size) {
+      return pickComboDestroyVariant('intercept');
+    }
+  }
+
+  if (getWinThreatsOnBoard(simulation.boardState, player).size >= 2) {
+    return pickComboDestroyVariant('doubleThreat');
+  }
+
+  return '';
 }
 
 // ─── BUILD BOARD ─────────────────────────────────────────────────────────────
@@ -617,42 +1524,25 @@ function injectPanelSymbols() {
 }
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
-const warnDivs = {};
-
 function render() {
-  Object.keys(warnDivs).forEach(k => {
-    const d = warnDivs[k];
-    if (d && d.parentNode) d.parentNode.removeChild(d);
-    delete warnDivs[k];
-  });
-
   for (let i = 0; i < 9; i++) {
     const cell  = cellEl(i);
     const owner = board[i];
-    cell.classList.remove('win-cipher', 'win-wraith');
+    cell.classList.remove('win-cipher', 'win-wraith', 'win-line-cell');
+    cell.style.removeProperty('--win-line-delay');
+    const existingMark = cell.querySelector('.cell-mark');
+    if (existingMark) existingMark.classList.remove('vanish-target');
     if (owner && !cell.querySelector('.cell-mark')) {
       cell.classList.add('occupied');
-      const wrap = document.createElement('div');
-      wrap.className = 'cell-mark';
-      wrap.innerHTML = owner === 'cipher' ? cipherSVG('#00eeff') : wraithSVG('#ff00cc');
-      cell.insertBefore(wrap, cell.firstChild);
+      cell.insertBefore(createMarkElement(owner), cell.firstChild);
     }
   }
 
   ['cipher', 'wraith'].forEach(p => {
     if (marks[p].length === MAX_MARKS) {
       const oldest = marks[p][0].cell;
-      const cell   = cellEl(oldest);
-      const d1 = document.createElement('div');
-      d1.className = 'warn-brackets';
-      d1.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:3;';
-      cell.appendChild(d1);
-      const d2 = document.createElement('div');
-      d2.className = 'warn-corner-rb';
-      d2.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:3;';
-      cell.appendChild(d2);
-      warnDivs[`${p}-a`] = d1;
-      warnDivs[`${p}-b`] = d2;
+      const mark = cellEl(oldest).querySelector('.cell-mark');
+      if (mark) mark.classList.add('vanish-target');
     }
   });
 
@@ -704,6 +1594,11 @@ function addHistory(player, cellIndex) {
 }
 
 function markHistoryErased(histId) {
+  const entry = historyData.find(item => item.id === histId);
+  if (entry) {
+    entry.erased = true;
+    entry.erasedOnTurn = historyCounter + 1;
+  }
   const el = document.getElementById(`hist-${histId}`);
   if (el) el.classList.add('erased');
 }
@@ -831,26 +1726,37 @@ function getWinThreats(player) {
 function detectCombos(player, placedCell, oppThreatsBeforeMove) {
   const opp = player === 'cipher' ? 'wraith' : 'cipher';
   if (ownMarkVanishedThisTurn) {
-    showCombo(t().combos.fadewin, player === 'cipher' ? 'var(--cipher)' : 'var(--wraith)');
+    showCombo(t().combos.fadewin, player === 'cipher' ? 'var(--cipher)' : 'var(--wraith)', {
+      title: null,
+      sound: 'light',
+    });
     return;
   }
   if (oppThreatsBeforeMove.has(placedCell)) {
     const stillThreats = getWinThreats(opp);
     if (stillThreats.size < oppThreatsBeforeMove.size) {
-      showCombo(t().combos.intercept, '#ff6a00');
+      showCombo(t().combos.intercept, '#ff6a00', {
+        title: null,
+        sound: 'medium',
+      });
       return;
     }
   }
   const myThreats = getWinThreats(player).size;
   if (myThreats >= 2) {
-    showCombo(t().combos.doubleThreat, player === 'cipher' ? 'var(--cipher)' : 'var(--wraith)');
+    showCombo(t().combos.doubleThreat, player === 'cipher' ? 'var(--cipher)' : 'var(--wraith)', {
+      title: null,
+      sound: 'heavy',
+    });
   }
 }
 
 // ─── HIGHLIGHT WIN ────────────────────────────────────────────────────────────
 function highlightWin(line, player) {
-  line.forEach(idx => {
-    cellEl(idx).className = `cell occupied win-${player}`;
+  line.forEach((idx, step) => {
+    const cell = cellEl(idx);
+    cell.className = `cell occupied win-${player} win-line-cell`;
+    cell.style.setProperty('--win-line-delay', `${step * 90}ms`);
   });
 }
 
@@ -873,6 +1779,9 @@ function onCellClick(index, source = 'human') {
 
   const opp           = player === 'cipher' ? 'wraith' : 'cipher';
   const oppThreatsNow = getWinThreats(opp);
+  const comboDestroyVariant = marks[player].length === MAX_MARKS
+    ? predictComboDestroyVariant(player, index, oppThreatsNow)
+    : '';
   hideGhost(cellEl(index));
 
   if (marks[player].length === MAX_MARKS) {
@@ -883,12 +1792,19 @@ function onCellClick(index, source = 'human') {
     markHistoryErased(oldest.histId);
     const oldCellEl = cellEl(vanCell);
     const markDiv   = oldCellEl.querySelector('.cell-mark');
-    if (markDiv) markDiv.classList.add('vanishing');
+    oldCellEl.style.setProperty('--vanish-glow', player === 'cipher' ? '#00eeff66' : '#ff00cc66');
+    oldCellEl.classList.add('vanish-cell');
+    if (comboDestroyVariant) oldCellEl.classList.add('combo-vanish', comboDestroyVariant);
+    if (markDiv) {
+      markDiv.classList.add('vanishing');
+      if (comboDestroyVariant) markDiv.classList.add('combo-vanishing', comboDestroyVariant);
+    }
     SFX.vanish();
     oldCellEl.querySelectorAll('.warn-brackets,.warn-corner-rb').forEach(d => d.remove());
     setTimeout(() => {
       oldCellEl.innerHTML = '';
       oldCellEl.className = 'cell';
+      oldCellEl.style.removeProperty('--vanish-glow');
       oldCellEl.tabIndex  = 0;
       placeNewMark(player, index, oppThreatsNow);
     }, 360);
@@ -904,10 +1820,7 @@ function placeNewMark(player, index, oppThreatsBeforeMove) {
 
   const cell = cellEl(index);
   cell.classList.add('occupied');
-  const wrap = document.createElement('div');
-  wrap.className = 'cell-mark placed';
-  wrap.innerHTML = player === 'cipher' ? cipherSVG('#00eeff') : wraithSVG('#ff00cc');
-  cell.insertBefore(wrap, cell.firstChild);
+  cell.insertBefore(createMarkElement(player, 'placed'), cell.firstChild);
   SFX.place();
 
   setTimeout(() => {
@@ -943,33 +1856,49 @@ function placeNewMark(player, index, oppThreatsBeforeMove) {
 function triggerDailyFail() {
   cancelBotMove();
   stopDailyTimer('fail');
+  stopMatchTimer();
   gameOver = true;
+  resultSummaryState = 'loss';
+  resultSummaryPlayer = currentUserName;
+  resultFlavorLine = pickResultFlavorLine('loss', currentUserName);
+  const savedEntry = persistCompletedMatch('loss', null);
+  resultSummaryTitleKey = savedEntry?.title?.key || '';
+  updateResultSummary();
+  updateResultFlavorText();
+  updateMatchResultText();
   updateAgainButtonLabel();
   statusEl.textContent = t().dailyFailed;
   statusEl.style.color = 'var(--warn)';
   showCombo(t().dailyFailed, 'var(--warn)');
-  setTimeout(() => {
+  if (typeof SFX !== 'undefined' && typeof SFX.lose === 'function') SFX.lose();
+  scheduleResultReveal(() => {
+    setResultPresentation('loss');
     winTitle.textContent      = t().dailyFailed;
     winTitle.className        = '';
     winTitle.style.color      = 'var(--warn)';
     winTitle.style.textShadow = '0 0 14px #ff6a0088';
-    document.getElementById('win-subtitle').textContent = t().dailyFailSub;
+    updateResultFlavorText();
     winSym.innerHTML    = '';
     scoreDisp.innerHTML = '';
     updateDailyResultText('fail');
     winOverlay.classList.add('show');
     setTimeout(() => winOverlay.querySelector('.btn').focus(), 100);
-  }, 800);
+  });
 }
 
 function triggerWin(winner) {
   cancelBotMove();
   if (gameMode === 'daily') stopDailyTimer('win');
+  stopMatchTimer();
   gameOver = true;
   roundsCompleted++;
   score[winner]++;
   updateScoreDisplay();
-  SFX.win();
+  const isVictory = winner === currentUserFaction;
+  if (typeof SFX !== 'undefined') {
+    if (isVictory && typeof SFX.win === 'function') SFX.win();
+    if (!isVictory && typeof SFX.lose === 'function') SFX.lose();
+  }
   updateModeBadge();
   updateAgainButtonLabel();
 
@@ -979,11 +1908,19 @@ function triggerWin(winner) {
     updateRankUI();
   }
 
+  setResultPresentation(isVictory ? 'win' : 'loss');
+  resultSummaryState = isVictory ? 'win' : 'loss';
+  resultSummaryPlayer = playerDisplayName(winner);
+  resultFlavorLine = pickResultFlavorLine(isVictory ? 'win' : 'loss', playerDisplayName(winner));
+  const savedEntry = persistCompletedMatch(isVictory ? 'win' : 'loss', winner);
+  resultSummaryTitleKey = savedEntry?.title?.key || '';
+  updateResultSummary();
+  updateResultFlavorText();
   winTitle.textContent = t().wins(playerDisplayName(winner));
   winTitle.className   = `win-${winner}`;
   winTitle.style.color = '';
   winTitle.style.textShadow = '';
-  document.getElementById('win-subtitle').textContent = t().winSub;
+  updateResultFlavorText();
   winSym.innerHTML    = winner === 'cipher' ? cipherSVG('#00eeff', 100) : wraithSVG('#ff00cc', 100);
   winSym.style.filter = winner === 'cipher'
     ? 'drop-shadow(0 0 14px #00eeffaa)'
@@ -993,6 +1930,7 @@ function triggerWin(winner) {
     `<span class="score-c">${score.cipher}</span>` +
     `<span style="color:var(--muted)"> &mdash; </span>` +
     `<span class="score-w">${score.wraith}</span>`;
+  updateMatchResultText();
   if (gameMode === 'daily') updateDailyResultText('win');
   else document.getElementById('daily-result').textContent = '';
 
@@ -1003,13 +1941,15 @@ function triggerWin(winner) {
     const newRankName = RANKS[rankedState[winner].rankIndex].name;
     const color = winner === 'cipher' ? 'var(--cipher)' : 'var(--wraith)';
     showCombo(`${t().rankUp} ${newRankName}`, color);
-    setTimeout(() => {
+    scheduleResultReveal(() => {
       winOverlay.classList.add('show');
       setTimeout(() => winOverlay.querySelector('.btn').focus(), 100);
-    }, 600);
+    }, RESULT_REVEAL_DELAY + 120);
   } else {
-    winOverlay.classList.add('show');
-    setTimeout(() => winOverlay.querySelector('.btn').focus(), 100);
+    scheduleResultReveal(() => {
+      winOverlay.classList.add('show');
+      setTimeout(() => winOverlay.querySelector('.btn').focus(), 100);
+    });
   }
 }
 
@@ -1018,11 +1958,57 @@ function updateScoreDisplay() {
   scoreWEl.textContent = `${score.wraith}  W`;
 }
 
+function startConfiguredMatch(resetSeries = true) {
+  stopDailyTimer();
+  dailyElapsedMs = 0;
+  clearMatchTimer();
+  winOverlay.classList.remove('show');
+  comboText.classList.remove('show');
+  clearTimeout(comboTimer);
+  if (resetSeries) {
+    matchRoundTotal = opponentType === 'local' ? selectedRoundCount : 1;
+    roundsCompleted = 0;
+    score = { cipher: 0, wraith: 0 };
+    updateScoreDisplay();
+    resetRankedState();
+  }
+  initState();
+  assignSidesForMatch();
+  histStrip.innerHTML = '';
+  buildBoard();
+  render();
+  clearAllGhosts();
+  updatePanelNames();
+  updateRankUI();
+  updateModeBadge();
+  updateAgainButtonLabel();
+  startMatchTimer();
+  beginMatchRecord();
+  document.getElementById('daily-result').textContent = '';
+  statusEl.textContent = t().movesFirst(playerDisplayName('cipher'));
+  statusEl.style.color  = 'var(--cipher)';
+  cellEl(0).focus();
+  if (isBotTurn()) scheduleBotMove();
+}
+
+function replayCurrentMatch() {
+  cancelBotMove();
+  if (typeof ensureMusicFromUserGesture === 'function') ensureMusicFromUserGesture();
+  if (gameMode === 'daily') {
+    const inp1 = document.getElementById('input-p1');
+    if (inp1) inp1.value = currentUserName;
+    startDailyChallenge();
+    return;
+  }
+  startConfiguredMatch(true);
+}
+
 // ─── RESTART ─────────────────────────────────────────────────────────────────
 function restartGame() {
   cancelBotMove();
   stopDailyTimer();
   dailyElapsedMs = 0;
+  clearMatchTimer();
   winOverlay.classList.remove('show');
   comboText.classList.remove('show');
   clearTimeout(comboTimer);
@@ -1035,6 +2021,7 @@ function restartGame() {
   updateRankUI();
   updateModeBadge();
   updateAgainButtonLabel();
+  startMatchTimer();
   document.getElementById('daily-result').textContent = '';
   statusEl.textContent = t().movesFirst(playerDisplayName('cipher'));
   statusEl.style.color  = 'var(--cipher)';
@@ -1047,13 +2034,19 @@ function handleAgainButton() {
     restartGame();
     return;
   }
+  replayCurrentMatch();
+}
+
+function handleMenuButton() {
   openSetup();
 }
 
 // ─── SETUP MODAL ─────────────────────────────────────────────────────────────
 function openSetup() {
   cancelBotMove();
+  cancelReplayPlayback();
   stopDailyTimer();
+  clearMatchTimer();
   winOverlay.classList.remove('show');
   document.getElementById('daily-result').textContent = '';
   const inp1 = document.getElementById('input-p1');
@@ -1074,6 +2067,7 @@ function startFromSetup() {
   if (typeof ensureMusicFromUserGesture === 'function') ensureMusicFromUserGesture();
   stopDailyTimer();
   dailyElapsedMs = 0;
+  clearMatchTimer();
   if (gameMode === 'ranked') {
     syncRankedLockState();
     return;
@@ -1091,27 +2085,8 @@ function startFromSetup() {
   }
   matchRoundTotal = opponentType === 'local' ? selectedRoundCount : 1;
   roundsCompleted = 0;
-  resetRankedState();
   document.getElementById('setup-overlay').classList.remove('show');
-  comboText.classList.remove('show');
-  clearTimeout(comboTimer);
-  score = { cipher: 0, wraith: 0 };
-  updateScoreDisplay();
-  initState();
-  assignSidesForMatch();
-  histStrip.innerHTML = '';
-  buildBoard();
-  render();
-  clearAllGhosts();
-  updatePanelNames();
-  updateRankUI();
-  updateModeBadge();
-  updateAgainButtonLabel();
-  document.getElementById('daily-result').textContent = '';
-  statusEl.textContent = t().movesFirst(playerDisplayName('cipher'));
-  statusEl.style.color  = 'var(--cipher)';
-  cellEl(0).focus();
-  if (isBotTurn()) scheduleBotMove();
+  startConfiguredMatch(true);
 }
 
 // ─── RULES MODAL ─────────────────────────────────────────────────────────────
@@ -1137,10 +2112,12 @@ document.addEventListener('click', e => {
 }, true);
 
 score = { cipher: 0, wraith: 0 };
+persistentProfile = loadPersistentProfile();
 injectPanelSymbols();
 initState();
 buildBoard();
 render();
+updateReplayButtonState();
 
 tgUser = getTelegramUser();
 if (tgUser) {

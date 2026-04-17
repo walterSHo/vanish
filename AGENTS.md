@@ -156,3 +156,14 @@ Decision policy:
 - Escalate to a stronger model only if the cheaper one fails or the task is clearly complex
 - Do not use high reasoning by default
 - Do not use the strongest model for routine UI or text edits
+
+## File creation rule
+Create a new file only when it is genuinely necessary for the task.
+
+Rules:
+- prefer editing existing files when the change logically belongs there
+- create a new file only if it improves structure or is required by the task
+- do not create duplicate, backup, temp, or alternative-version files
+- do not create files with names like final, new, copy, old, temp, v2 unless explicitly requested
+- if a new file is created, mention why it was necessary
+- if a new file changes project structure, update CHANGELOG_AI.md and ROADMAP.md if relevant
