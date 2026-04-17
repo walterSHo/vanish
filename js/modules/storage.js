@@ -2,20 +2,66 @@ export const STORAGE_KEY = 'vanish-local-save';
 export const STORAGE_VERSION = 1;
 export const MATCH_HISTORY_LIMIT = 250;
 
+function countMatches(matches, predicate) {
+  return matches.reduce((count, match) => (predicate(match) ? count + 1 : count), 0);
+}
+
+function selectRecentMatches(matches, predicate, limit = 5) {
+  return matches.filter(predicate).slice(0, limit);
+}
+
+function averageMetric(matches, selector) {
+  if (!matches.length) return 0;
+  const total = matches.reduce((sum, match) => sum + selector(match), 0);
+  return total / matches.length;
+}
+
 const TITLE_RULES = [
   {
+    key: 'coldblooded',
+    scope: 'match',
+    unlock: false,
+    priority: 110,
+    matches: ctx => ctx.outcome === 'win'
+      && ((ctx.entry.durationMs > 0 && ctx.entry.durationMs <= 25000) || ctx.entry.statsContext.totalTurns <= 5),
+  },
+  {
+    key: 'lastPulse',
+    scope: 'match',
+    unlock: false,
+    priority: 102,
+    matches: ctx => ctx.outcome === 'win'
+      && ctx.entry.statsContext.totalTurns >= 8
+      && ctx.entry.durationMs <= 65000,
+  },
+  {
+    key: 'silentHunter',
+    scope: 'match',
+    unlock: false,
+    priority: 82,
+    matches: ctx => ctx.outcome === 'win'
+      && (ctx.entry.durationMs >= 90000 || ctx.entry.statsContext.totalTurns >= 8),
+  },
+  {
     key: 'merciless',
-    source: 'career',
+    scope: 'career',
+    unlock: true,
+    priority: 95,
     matches: ctx => ctx.outcome === 'win' && ctx.stats.currentStreak >= 5,
   },
   {
     key: 'rhythmBreaker',
-    source: 'match',
-    matches: ctx => ctx.outcome === 'win' && ctx.entry.opponentType === 'bot' && ctx.entry.difficulty === 'xo',
+    scope: 'career',
+    unlock: true,
+    priority: 90,
+    matches: ctx => ctx.outcome === 'win'
+      && countMatches(ctx.matches, match => match.outcome === 'win' && match.opponentType === 'bot' && match.difficulty === 'xo') >= 3,
   },
   {
     key: 'signalBinder',
-    source: 'career',
+    scope: 'career',
+    unlock: true,
+    priority: 78,
     matches: ctx => ctx.outcome === 'win'
       && ctx.entry.playerSide === 'cipher'
       && ctx.stats.sidesPlayed.cipher >= 8
@@ -23,7 +69,9 @@ const TITLE_RULES = [
   },
   {
     key: 'boardPhantom',
-    source: 'career',
+    scope: 'career',
+    unlock: true,
+    priority: 78,
     matches: ctx => ctx.outcome === 'win'
       && ctx.entry.playerSide === 'wraith'
       && ctx.stats.sidesPlayed.wraith >= 8
@@ -31,29 +79,47 @@ const TITLE_RULES = [
   },
   {
     key: 'challengeShade',
-    source: 'career',
+    scope: 'career',
+    unlock: true,
+    priority: 72,
     matches: ctx => ctx.outcome === 'win'
       && ctx.entry.gameMode === 'daily'
-      && ctx.matches.filter(match => match.outcome === 'win' && match.gameMode === 'daily').length >= 3,
+      && countMatches(ctx.matches, match => match.outcome === 'win' && match.gameMode === 'daily') >= 3,
   },
   {
-    key: 'coldblooded',
-    source: 'match',
-    matches: ctx => ctx.outcome === 'win'
-      && ((ctx.entry.durationMs > 0 && ctx.entry.durationMs <= 25000) || ctx.entry.statsContext.totalTurns <= 5),
+    key: 'pressureLine',
+    scope: 'career',
+    unlock: true,
+    priority: 70,
+    matches: ctx => {
+      const recentWins = selectRecentMatches(ctx.matches, match => match.outcome === 'win', 5);
+      return recentWins.length >= 4
+        && averageMetric(recentWins, match => match.statsContext?.totalTurns || 0) <= 5.5;
+    },
   },
   {
-    key: 'lastPulse',
-    source: 'match',
-    matches: ctx => ctx.outcome === 'win'
-      && ctx.entry.statsContext.totalTurns >= 7
-      && ctx.entry.durationMs <= 65000,
+    key: 'fieldController',
+    scope: 'career',
+    unlock: true,
+    priority: 68,
+    matches: ctx => {
+      const recentWins = selectRecentMatches(ctx.matches, match => match.outcome === 'win', 5);
+      return recentWins.length >= 4
+        && averageMetric(recentWins, match => match.durationMs || 0) >= 70000
+        && averageMetric(recentWins, match => match.statsContext?.totalTurns || 0) >= 7;
+    },
   },
   {
-    key: 'silentHunter',
-    source: 'match',
-    matches: ctx => ctx.outcome === 'win'
-      && (ctx.entry.durationMs >= 90000 || ctx.entry.statsContext.totalTurns >= 8),
+    key: 'cleanFinish',
+    scope: 'career',
+    unlock: true,
+    priority: 66,
+    matches: ctx => {
+      const recentWins = selectRecentMatches(ctx.matches, match => match.outcome === 'win', 4);
+      return recentWins.length >= 3
+        && averageMetric(recentWins, match => match.durationMs || 0) <= 32000
+        && averageMetric(recentWins, match => match.statsContext?.totalTurns || 0) <= 5.5;
+    },
   },
 ];
 
@@ -88,6 +154,7 @@ export function createDefaultPersistentProfile() {
       totalMatches: 0,
       totalWins: 0,
       totalLosses: 0,
+      totalDraws: 0,
       winRate: 0,
       currentStreak: 0,
       bestStreak: 0,
@@ -96,6 +163,7 @@ export function createDefaultPersistentProfile() {
       sidesPlayed: { cipher: 0, wraith: 0 },
       modesPlayed: { duel: 0, ranked: 0, daily: 0 },
       difficultiesPlayed: { baby: 0, norm: 0, xo: 0 },
+      lastPlayedAt: null,
       updatedAt: null,
     },
     titles: {
@@ -123,6 +191,7 @@ export function normalizePersistentProfile(raw) {
   const totalMatches = Number(stats.totalMatches);
   const totalWins = Number(stats.totalWins);
   const totalLosses = Number(stats.totalLosses);
+  const totalDraws = Number(stats.totalDraws);
   const totalDurationMs = Number(stats.totalDurationMs);
   const currentStreak = Number(stats.currentStreak);
   const bestStreak = Number(stats.bestStreak);
@@ -130,12 +199,14 @@ export function normalizePersistentProfile(raw) {
   base.stats.totalMatches = Number.isFinite(totalMatches) && totalMatches >= 0 ? totalMatches : 0;
   base.stats.totalWins = Number.isFinite(totalWins) && totalWins >= 0 ? totalWins : 0;
   base.stats.totalLosses = Number.isFinite(totalLosses) && totalLosses >= 0 ? totalLosses : 0;
+  base.stats.totalDraws = Number.isFinite(totalDraws) && totalDraws >= 0 ? totalDraws : 0;
   base.stats.totalDurationMs = Number.isFinite(totalDurationMs) && totalDurationMs >= 0 ? totalDurationMs : 0;
   base.stats.currentStreak = Number.isFinite(currentStreak) && currentStreak >= 0 ? currentStreak : 0;
   base.stats.bestStreak = Number.isFinite(bestStreak) && bestStreak >= 0 ? bestStreak : 0;
   base.stats.sidesPlayed = normalizeCounterMap(stats.sidesPlayed, ['cipher', 'wraith']);
   base.stats.modesPlayed = normalizeCounterMap(stats.modesPlayed, ['duel', 'ranked', 'daily']);
   base.stats.difficultiesPlayed = normalizeCounterMap(stats.difficultiesPlayed, ['baby', 'norm', 'xo']);
+  base.stats.lastPlayedAt = typeof stats.lastPlayedAt === 'string' ? stats.lastPlayedAt : null;
   base.stats.updatedAt = typeof stats.updatedAt === 'string' ? stats.updatedAt : null;
 
   if (base.stats.totalMatches > 0) {
@@ -277,6 +348,15 @@ export function createMatchHistoryEntry({
     initialState: matchRecord?.initialState || finalState,
     finalState,
     turns,
+    events: turns.map(turn => ({
+      type: 'move',
+      turn: turn.turn,
+      player: turn.player,
+      cell: turn.cell,
+      label: turn.label,
+      erased: turn.erased,
+      erasedOnTurn: turn.erasedOnTurn,
+    })),
     statsContext: {
       totalTurns: turns.length,
       score: { cipher: score.cipher, wraith: score.wraith },
@@ -325,10 +405,14 @@ function resolveEntryTitles(profile, entry, statsSnapshot, prospectiveMatches) {
     stats: statsSnapshot,
     matches: prospectiveMatches,
   };
-  const qualified = TITLE_RULES.filter(rule => rule.matches(context));
-  const selectedRule = qualified[0] || null;
+  const qualified = TITLE_RULES
+    .filter(rule => rule.matches(context))
+    .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  const selectedRule = qualified.find(rule => rule.scope === 'match')
+    || qualified.find(rule => rule.scope === 'career')
+    || null;
   const selectedKey = selectedRule?.key || resolveFallbackTitle(profile, entry);
-  const selectedSource = selectedRule?.source || (selectedKey ? 'identity' : null);
+  const selectedSource = selectedRule?.scope || (selectedKey ? 'career' : null);
   return { qualified, selectedKey, selectedSource };
 }
 
@@ -348,6 +432,9 @@ export function updateProfileWithCompletedMatch({
     stats.totalWins += 1;
     stats.currentStreak += 1;
     stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
+  } else if (entry.outcome === 'draw') {
+    stats.totalDraws += 1;
+    stats.currentStreak = 0;
   } else {
     stats.totalLosses += 1;
     stats.currentStreak = 0;
@@ -364,11 +451,14 @@ export function updateProfileWithCompletedMatch({
   if (opponentType === 'bot' && gameMode === 'duel' && stats.difficultiesPlayed[selectedBotDifficulty] !== undefined) {
     stats.difficultiesPlayed[selectedBotDifficulty] += 1;
   }
+  stats.lastPlayedAt = entry.savedAt;
   stats.updatedAt = entry.savedAt;
 
   const prospectiveMatches = [entry, ...nextProfile.matches].slice(0, MATCH_HISTORY_LIMIT);
   const titleResolution = resolveEntryTitles(nextProfile, entry, stats, prospectiveMatches);
-  titleResolution.qualified.forEach(rule => unlockTitle(nextProfile, rule.key, rule.source, entry.savedAt));
+  titleResolution.qualified
+    .filter(rule => rule.unlock)
+    .forEach(rule => unlockTitle(nextProfile, rule.key, rule.scope, entry.savedAt));
   entry.title = titleResolution.selectedKey
     ? { key: titleResolution.selectedKey, source: titleResolution.selectedSource }
     : null;

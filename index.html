@@ -148,63 +148,115 @@
 <!-- SETUP MODAL -->
 <div id="setup-overlay" role="dialog" aria-modal="true" aria-labelledby="setup-title">
   <div id="setup-box">
-    <div id="setup-title" data-ru="ИГРОКИ" data-en="PLAYERS">ИГРОКИ</div>
-    <!-- mode toggle -->
-    <div id="mode-toggle">
-      <button class="mode-btn active" id="btn-mode-duel"   onclick="selectMode('duel')"   data-ru="ДУЭЛЬ"   data-en="DUEL">ДУЭЛЬ</button>
-      <button class="mode-btn"        id="btn-mode-ranked" onclick="selectMode('ranked')" data-ru="РАНГ" data-en="RANKED">РАНГ</button>
-      <button class="mode-btn"        id="btn-mode-daily"  onclick="selectMode('daily')"  data-ru="ВЫЗОВ" data-en="DAILY">ВЫЗОВ</button>
-    </div>
-    <div class="setup-row" id="setup-row-p1">
-      <label class="setup-label cipher" for="input-p1" id="label-p1" data-ru="ВАШ НИК" data-en="YOUR NICKNAME">ВАШ НИК</label>
-      <input class="setup-input" id="input-p1" type="text" maxlength="16" autocomplete="off" placeholder="Игрок 1">
-    </div>
-    <div class="setup-row" id="setup-row-p2" style="display:none;">
-      <label class="setup-label wraith" for="input-p2" id="label-p2" data-ru="ИГРОК 2" data-en="PLAYER 2">ИГРОК 2</label>
-      <input class="setup-input" id="input-p2" type="text" maxlength="16" autocomplete="off" placeholder="Игрок 2">
-    </div>
-    <div class="setup-row" id="setup-opponent-row">
-      <div class="setup-label wraith" data-ru="Тип соперника" data-en="Opponent Type">Тип соперника</div>
-      <div class="setup-opponent-card">
-        <div class="setup-opponent-types">
-          <button class="setup-opponent-btn active" id="btn-opponent-bot" type="button" onclick="selectOpponentType('bot')" data-ru="БОТ" data-en="BOT">БОТ</button>
-          <button class="setup-opponent-btn" id="btn-opponent-local" type="button" onclick="selectOpponentType('local')" data-ru="ЛОКАЛЬНЫЙ" data-en="LOCAL HUMAN">ЛОКАЛЬНЫЙ</button>
+    <div id="setup-layout">
+      <aside id="setup-progress-pane">
+        <div class="setup-pane-head">
+          <div class="setup-label" id="setup-progress-label" data-ru="ПРОГРЕСС" data-en="PROGRESS">ПРОГРЕСС</div>
         </div>
-      </div>
-    </div>
-    <div class="setup-row" id="setup-bot-difficulty-row" style="display:none;">
-      <div class="setup-label wraith" data-ru="Сложность бота" data-en="Bot Difficulty">Сложность бота</div>
-      <div class="setup-bot-card">
-        <div class="setup-bot-types">
-          <button class="setup-bot-btn" id="btn-bot-baby" type="button" onclick="selectBotDifficulty('baby')" data-ru="БЕЙБИ" data-en="BABY">БЕЙБИ</button>
-          <button class="setup-bot-btn" id="btn-bot-norm" type="button" onclick="selectBotDifficulty('norm')" data-ru="НОРМ" data-en="NORM">НОРМ</button>
-          <button class="setup-bot-btn active" id="btn-bot-xo" type="button" onclick="selectBotDifficulty('xo')" data-ru="ХО" data-en="XO">ХО</button>
+        <div class="setup-progress-card">
+          <div class="setup-stats-grid" id="setup-stats-grid">
+            <div class="setup-stat-item">
+              <span class="setup-stat-label" id="stats-label-matches" data-ru="МАТЧИ" data-en="MATCHES">МАТЧИ</span>
+              <span class="setup-stat-value" id="stats-total-matches">0</span>
+            </div>
+            <div class="setup-stat-item">
+              <span class="setup-stat-label" id="stats-label-winrate" data-ru="ВИНРЕЙТ" data-en="WIN RATE">ВИНРЕЙТ</span>
+              <span class="setup-stat-value" id="stats-win-rate">0%</span>
+            </div>
+            <div class="setup-stat-item">
+              <span class="setup-stat-label" id="stats-label-streak" data-ru="СТРИК" data-en="STREAK">СТРИК</span>
+              <span class="setup-stat-value" id="stats-current-streak">0</span>
+            </div>
+            <div class="setup-stat-item">
+              <span class="setup-stat-label" id="stats-label-best" data-ru="ЛУЧШИЙ" data-en="BEST">ЛУЧШИЙ</span>
+              <span class="setup-stat-value" id="stats-best-streak">0</span>
+            </div>
+            <div class="setup-stat-item">
+              <span class="setup-stat-label" id="stats-label-avg" data-ru="СР. ВРЕМЯ" data-en="AVG TIME">СР. ВРЕМЯ</span>
+              <span class="setup-stat-value" id="stats-average-time">--:--</span>
+            </div>
+            <div class="setup-stat-item">
+              <span class="setup-stat-label" id="stats-label-last" data-ru="ПОСЛЕДНИЙ" data-en="LAST PLAYED">ПОСЛЕДНИЙ</span>
+              <span class="setup-stat-value" id="stats-last-played">—</span>
+            </div>
+          </div>
+          <div class="setup-history-block">
+            <div class="setup-history-head">
+              <span class="setup-history-title" id="setup-history-title" data-ru="ПОСЛЕДНИЕ МАТЧИ" data-en="RECENT MATCHES">ПОСЛЕДНИЕ МАТЧИ</span>
+            </div>
+            <div class="setup-history-list" id="setup-history-list"></div>
+            <div class="setup-history-empty" id="setup-history-empty" data-ru="ЕЩЁ НЕТ ИСТОРИИ" data-en="NO MATCHES YET">ЕЩЁ НЕТ ИСТОРИИ</div>
+          </div>
+          <div class="setup-titles-block">
+            <div class="setup-history-head">
+              <span class="setup-history-title" id="setup-titles-title" data-ru="ТИТУЛЫ" data-en="TITLES">ТИТУЛЫ</span>
+              <span class="setup-title-count" id="setup-title-count">0</span>
+            </div>
+            <div class="setup-title-list" id="setup-title-list"></div>
+            <div class="setup-history-empty" id="setup-titles-empty" data-ru="ТИТУЛЫ ЕЩЁ НЕ ОТКРЫТЫ" data-en="NO TITLES UNLOCKED YET">ТИТУЛЫ ЕЩЁ НЕ ОТКРЫТЫ</div>
+          </div>
         </div>
-      </div>
-    </div>
-    <div class="setup-row" id="setup-rounds-row" style="display:none;">
-      <div class="setup-label cipher" data-ru="Раунды" data-en="Rounds">Раунды</div>
-      <div class="setup-rounds-card">
-        <div class="setup-rounds-types">
-          <button class="setup-round-btn active" id="btn-rounds-1" type="button" onclick="selectRoundCount(1)">1</button>
-          <button class="setup-round-btn" id="btn-rounds-3" type="button" onclick="selectRoundCount(3)">3</button>
-          <button class="setup-round-btn" id="btn-rounds-5" type="button" onclick="selectRoundCount(5)">5</button>
+      </aside>
+      <div id="setup-main-pane">
+        <div id="setup-title" data-ru="ИГРОКИ" data-en="PLAYERS">ИГРОКИ</div>
+        <!-- mode toggle -->
+        <div id="mode-toggle">
+          <button class="mode-btn active" id="btn-mode-duel"   onclick="selectMode('duel')"   data-ru="ДУЭЛЬ"   data-en="DUEL">ДУЭЛЬ</button>
+          <button class="mode-btn"        id="btn-mode-ranked" onclick="selectMode('ranked')" data-ru="РАНГ" data-en="RANKED">РАНГ</button>
+          <button class="mode-btn"        id="btn-mode-daily"  onclick="selectMode('daily')"  data-ru="ВЫЗОВ" data-en="DAILY">ВЫЗОВ</button>
         </div>
+        <div class="setup-row" id="setup-row-p1">
+          <label class="setup-label cipher" for="input-p1" id="label-p1" data-ru="ВАШ НИК" data-en="YOUR NICKNAME">ВАШ НИК</label>
+          <input class="setup-input" id="input-p1" type="text" maxlength="16" autocomplete="off" placeholder="Игрок 1">
+        </div>
+        <div class="setup-row" id="setup-row-p2" style="display:none;">
+          <label class="setup-label wraith" for="input-p2" id="label-p2" data-ru="ИГРОК 2" data-en="PLAYER 2">ИГРОК 2</label>
+          <input class="setup-input" id="input-p2" type="text" maxlength="16" autocomplete="off" placeholder="Игрок 2">
+        </div>
+        <div class="setup-row" id="setup-opponent-row">
+          <div class="setup-label wraith" data-ru="Тип соперника" data-en="Opponent Type">Тип соперника</div>
+          <div class="setup-opponent-card">
+            <div class="setup-opponent-types">
+              <button class="setup-opponent-btn active" id="btn-opponent-bot" type="button" onclick="selectOpponentType('bot')" data-ru="БОТ" data-en="BOT">БОТ</button>
+              <button class="setup-opponent-btn" id="btn-opponent-local" type="button" onclick="selectOpponentType('local')" data-ru="ЛОКАЛЬНЫЙ" data-en="LOCAL HUMAN">ЛОКАЛЬНЫЙ</button>
+            </div>
+          </div>
+        </div>
+        <div class="setup-row" id="setup-bot-difficulty-row" style="display:none;">
+          <div class="setup-label wraith" data-ru="Сложность бота" data-en="Bot Difficulty">Сложность бота</div>
+          <div class="setup-bot-card">
+            <div class="setup-bot-types">
+              <button class="setup-bot-btn" id="btn-bot-baby" type="button" onclick="selectBotDifficulty('baby')" data-ru="БЕЙБИ" data-en="BABY">БЕЙБИ</button>
+              <button class="setup-bot-btn" id="btn-bot-norm" type="button" onclick="selectBotDifficulty('norm')" data-ru="НОРМ" data-en="NORM">НОРМ</button>
+              <button class="setup-bot-btn active" id="btn-bot-xo" type="button" onclick="selectBotDifficulty('xo')" data-ru="ХО" data-en="XO">ХО</button>
+            </div>
+          </div>
+        </div>
+        <div class="setup-row" id="setup-rounds-row" style="display:none;">
+          <div class="setup-label cipher" data-ru="Раунды" data-en="Rounds">Раунды</div>
+          <div class="setup-rounds-card">
+            <div class="setup-rounds-types">
+              <button class="setup-round-btn active" id="btn-rounds-1" type="button" onclick="selectRoundCount(1)">1</button>
+              <button class="setup-round-btn" id="btn-rounds-3" type="button" onclick="selectRoundCount(3)">3</button>
+              <button class="setup-round-btn" id="btn-rounds-5" type="button" onclick="selectRoundCount(5)">5</button>
+            </div>
+          </div>
+        </div>
+        <div class="setup-row" id="setup-music-row">
+          <div class="setup-label" id="setup-music-label" data-ru="МУЗЫКА" data-en="MUSIC">МУЗЫКА</div>
+          <div class="setup-music-card">
+            <button class="setup-music-toggle" id="btn-setup-music" type="button" onclick="toggleMusic()" data-state-on-ru="ВКЛ" data-state-off-ru="ВЫКЛ" data-state-on-en="ON" data-state-off-en="OFF">
+              <span class="setup-music-text" id="setup-music-text">МУЗЫКА</span>
+              <span class="setup-music-state" id="setup-music-state">ВКЛ</span>
+            </button>
+          </div>
+        </div>
+        <div class="setup-row" id="setup-ranked-lock-row" style="display:none;">
+          <div class="setup-ranked-lock" id="setup-ranked-lock" data-ru="СКОРО..." data-en="COMING SOON...">СКОРО...</div>
+        </div>
+        <button class="btn" id="btn-setup-start" type="button" data-ru="НАЧАТЬ" data-en="START">НАЧАТЬ</button>
       </div>
     </div>
-    <div class="setup-row" id="setup-music-row">
-      <div class="setup-label" id="setup-music-label" data-ru="МУЗЫКА" data-en="MUSIC">МУЗЫКА</div>
-      <div class="setup-music-card">
-        <button class="setup-music-toggle" id="btn-setup-music" type="button" onclick="toggleMusic()" data-state-on-ru="ВКЛ" data-state-off-ru="ВЫКЛ" data-state-on-en="ON" data-state-off-en="OFF">
-          <span class="setup-music-text" id="setup-music-text">МУЗЫКА</span>
-          <span class="setup-music-state" id="setup-music-state">ВКЛ</span>
-        </button>
-      </div>
-    </div>
-    <div class="setup-row" id="setup-ranked-lock-row" style="display:none;">
-      <div class="setup-ranked-lock" id="setup-ranked-lock" data-ru="СКОРО..." data-en="COMING SOON...">СКОРО...</div>
-    </div>
-    <button class="btn" id="btn-setup-start" onclick="startFromSetup()" data-ru="НАЧАТЬ" data-en="START">НАЧАТЬ</button>
   </div>
 </div>
 

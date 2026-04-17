@@ -60,6 +60,27 @@ const T = {
     exportLabelMode: 'РЕЖИМ',
     exportLabelTime: 'ВРЕМЯ',
     exportLabelDifficulty: 'СЛОЖН.',
+    statsProgress: 'ПРОГРЕСС',
+    statsMatches: 'МАТЧИ',
+    statsWinRate: 'ВИНРЕЙТ',
+    statsStreak: 'СТРИК',
+    statsBest: 'ЛУЧШИЙ',
+    statsAvgTime: 'СР. ВРЕМЯ',
+    statsLastPlayed: 'ПОСЛЕДНИЙ',
+    statsRecentMatches: 'ПОСЛЕДНИЕ МАТЧИ',
+    statsNoHistory: 'ЕЩЁ НЕТ ИСТОРИИ',
+    statsUnlockedTitles: 'ТИТУЛЫ',
+    statsNoTitles: 'ТИТУЛЫ ЕЩЁ НЕ ОТКРЫТЫ',
+    statsTitleCount: '{n} ОТКР.',
+    statsSummaryWlt: '{wins}W / {losses}L / {draws}D',
+    statsLastPlayedToday: 'СЕГОДНЯ',
+    statsLastPlayedYesterday: 'ВЧЕРА',
+    statsUnknown: '—',
+    historyOutcomeWin: 'ПОБЕДА',
+    historyOutcomeLoss: 'ПОРАЖЕНИЕ',
+    historyOutcomeDraw: 'НИЧЬЯ',
+    historyVsBot: 'vs БОТ',
+    historyVsLocal: 'vs ЛОКАЛ',
     exportFlavorWin: 'сигнал закреплён // vanish помнит',
     exportFlavorLoss: 'контур дрогнул // реванш рядом',
     resultFlavorWins: [
@@ -115,6 +136,9 @@ const T = {
       coldblooded: 'ХЛАДНОКРОВНЫЙ',
       lastPulse: 'ПОСЛЕДНИЙ ИМПУЛЬС',
       silentHunter: 'ТИХИЙ ОХОТНИК',
+      pressureLine: 'ЛИНИЯ ДАВЛЕНИЯ',
+      fieldController: 'КОНТРОЛЬ ПОЛЯ',
+      cleanFinish: 'ЧИСТЫЙ ФИНИШ',
     },
   },
   en: {
@@ -175,6 +199,27 @@ const T = {
     exportLabelMode: 'MODE',
     exportLabelTime: 'TIME',
     exportLabelDifficulty: 'DIFF',
+    statsProgress: 'PROGRESS',
+    statsMatches: 'MATCHES',
+    statsWinRate: 'WIN RATE',
+    statsStreak: 'STREAK',
+    statsBest: 'BEST',
+    statsAvgTime: 'AVG TIME',
+    statsLastPlayed: 'LAST PLAYED',
+    statsRecentMatches: 'RECENT MATCHES',
+    statsNoHistory: 'NO MATCHES YET',
+    statsUnlockedTitles: 'TITLES',
+    statsNoTitles: 'NO TITLES UNLOCKED YET',
+    statsTitleCount: '{n} UNLOCKED',
+    statsSummaryWlt: '{wins}W / {losses}L / {draws}D',
+    statsLastPlayedToday: 'TODAY',
+    statsLastPlayedYesterday: 'YESTERDAY',
+    statsUnknown: '—',
+    historyOutcomeWin: 'VICTORY',
+    historyOutcomeLoss: 'DEFEAT',
+    historyOutcomeDraw: 'DRAW',
+    historyVsBot: 'vs BOT',
+    historyVsLocal: 'vs LOCAL',
     exportFlavorWin: 'signal locked // vanish remembers',
     exportFlavorLoss: 'the grid slipped // rematch soon',
     resultFlavorWins: [
@@ -228,6 +273,9 @@ const T = {
       coldblooded: 'COLDBLOODED',
       lastPulse: 'LAST PULSE',
       silentHunter: 'SILENT HUNTER',
+      pressureLine: 'PRESSURE LINE',
+      fieldController: 'FIELD CONTROLLER',
+      cleanFinish: 'CLEAN FINISH',
     },
   },
 };
@@ -236,6 +284,7 @@ function t() { return T[lang]; }
 
 function setLang(l) {
   lang = l;
+  document.documentElement.lang = l;
   document.getElementById('btn-ru').classList.toggle('active', l === 'ru');
   document.getElementById('btn-en').classList.toggle('active', l === 'en');
 
@@ -293,9 +342,32 @@ function setLang(l) {
   if (setupMusicText) setupMusicText.textContent = t().setupLabelMusic;
   const rankedLock = document.getElementById('setup-ranked-lock');
   if (rankedLock) rankedLock.textContent = t().comingSoon;
+  const statsProgressLabel = document.getElementById('setup-progress-label');
+  if (statsProgressLabel) statsProgressLabel.textContent = t().statsProgress;
+  const statsMatchesLabel = document.getElementById('stats-label-matches');
+  if (statsMatchesLabel) statsMatchesLabel.textContent = t().statsMatches;
+  const statsWinRateLabel = document.getElementById('stats-label-winrate');
+  if (statsWinRateLabel) statsWinRateLabel.textContent = t().statsWinRate;
+  const statsStreakLabel = document.getElementById('stats-label-streak');
+  if (statsStreakLabel) statsStreakLabel.textContent = t().statsStreak;
+  const statsBestLabel = document.getElementById('stats-label-best');
+  if (statsBestLabel) statsBestLabel.textContent = t().statsBest;
+  const statsAvgLabel = document.getElementById('stats-label-avg');
+  if (statsAvgLabel) statsAvgLabel.textContent = t().statsAvgTime;
+  const statsLastLabel = document.getElementById('stats-label-last');
+  if (statsLastLabel) statsLastLabel.textContent = t().statsLastPlayed;
+  const setupHistoryTitle = document.getElementById('setup-history-title');
+  if (setupHistoryTitle) setupHistoryTitle.textContent = t().statsRecentMatches;
+  const setupHistoryEmpty = document.getElementById('setup-history-empty');
+  if (setupHistoryEmpty) setupHistoryEmpty.textContent = t().statsNoHistory;
+  const setupTitlesTitle = document.getElementById('setup-titles-title');
+  if (setupTitlesTitle) setupTitlesTitle.textContent = t().statsUnlockedTitles;
+  const setupTitlesEmpty = document.getElementById('setup-titles-empty');
+  if (setupTitlesEmpty) setupTitlesEmpty.textContent = t().statsNoTitles;
   if (typeof window.setMusicButtonState === 'function') window.setMusicButtonState();
   if (typeof window.syncRankedLockState === 'function') window.syncRankedLockState();
   if (typeof window.syncLocalizedOpponentName === 'function') window.syncLocalizedOpponentName();
+  if (typeof window.refreshPersistentProgress === 'function') window.refreshPersistentProgress();
 }
 
 export { t, setLang };

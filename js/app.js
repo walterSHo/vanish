@@ -142,7 +142,7 @@ let resultSummaryTitleKey = '';
 let resultFlavorLine = '';
 let lastResultFlavorLine = '';
 let resultRevealTimer = null;
-const RESULT_REVEAL_DELAY = 720;
+const RESULT_REVEAL_DELAY = 820;
 const VANISH_STORAGE_KEY = VANISH_STORAGE_KEY_MODULE;
 let persistentProfile = null;
 let currentMatchRecord = null;
@@ -200,30 +200,27 @@ function resetMatchRecord() {
 
 function buildMatchHistoryEntry(outcome, winnerFaction = null) {
   return createMatchHistoryEntry({
-    currentMatchRecord,
+    matchRecord: currentMatchRecord,
     outcome,
     winnerFaction,
-    gameMode,
-    opponentType,
-    selectedBotDifficulty,
-    currentUserFaction,
+    winnerName: winnerFaction ? playerDisplayName(winnerFaction) : null,
+    playerSide: currentUserFaction,
+    opponentSide: oppositeFaction(currentUserFaction),
+    difficulty: opponentType === 'bot' ? selectedBotDifficulty : null,
     currentUserName,
-    nicknames,
-    matchRoundTotal,
     currentRoundNumber: currentRoundNumber(),
+    matchRoundTotal,
+    finalState: createMatchSnapshot(),
     matchElapsedMs,
     historyData,
     score,
     resultSummaryState,
-    playerDisplayName,
-    oppositeFaction,
-    createMatchSnapshot,
     formatMatchTime,
   });
 }
 
 function getTitleText(key) {
-  return resolveTitleText(key, t);
+  return resolveTitleText(key, t().titles);
 }
 
 function persistCompletedMatch(outcome, winnerFaction = null) {
@@ -231,18 +228,21 @@ function persistCompletedMatch(outcome, winnerFaction = null) {
   if (!persistentProfile) persistentProfile = loadPersistentProfile();
 
   const entry = buildMatchHistoryEntry(outcome, winnerFaction);
-  persistentProfile = updateProfileWithCompletedMatch(persistentProfile, {
+  const { profile: nextProfile, entry: savedEntry } = updateProfileWithCompletedMatch({
+    profile: persistentProfile,
     entry,
     currentUserFaction,
     gameMode,
     opponentType,
     selectedBotDifficulty,
   });
+  persistentProfile = nextProfile;
 
   currentMatchSaved = true;
   savePersistentProfile();
+  refreshPersistentProgress();
   updateReplayButtonState();
-  return entry;
+  return savedEntry;
 }
 
 function cancelReplayPlayback() {
@@ -260,6 +260,136 @@ function cancelReplayPlayback() {
 
 function getLatestReplayEntry() {
   return persistentProfile?.matches?.[0] || null;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function formatCompactDateLabel(isoString) {
+  if (!isoString) return t().statsUnknown;
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return t().statsUnknown;
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startTarget = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((startToday - startTarget) / 86400000);
+  if (diffDays === 0) return t().statsLastPlayedToday;
+  if (diffDays === 1) return t().statsLastPlayedYesterday;
+  return date.toLocaleDateString(document.documentElement.lang === 'ru' ? 'ru-RU' : 'en-US', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  });
+}
+
+function getHistoryOutcomeText(outcome) {
+  if (outcome === 'win') return t().historyOutcomeWin;
+  if (outcome === 'draw') return t().historyOutcomeDraw;
+  return t().historyOutcomeLoss;
+}
+
+function getHistoryModeText(mode) {
+  if (mode === 'ranked') return t().modeRanked;
+  if (mode === 'daily') return t().modeDaily;
+  return t().modeDuel;
+}
+
+function getHistoryOpponentText(type) {
+  return type === 'local' ? t().historyVsLocal : t().historyVsBot;
+}
+
+function buildRecentHistoryItem(entry) {
+  const titleText = entry?.title?.key ? getTitleText(entry.title.key) : '';
+  const modeText = getHistoryModeText(entry.gameMode);
+  const opponentText = getHistoryOpponentText(entry.opponentType);
+  const diffText = entry.opponentType === 'bot' && entry.difficulty
+    ? ` · ${String(entry.difficulty).toUpperCase()}`
+    : '';
+  const titlePart = titleText ? ` · ${titleText}` : '';
+  const line = `${escapeHtml(entry.winnerName || entry.currentUserName || 'VANISH')}${titlePart ? ` · ${escapeHtml(titleText)}` : ''}`;
+  const meta = `${escapeHtml(modeText)} · ${escapeHtml(opponentText)}${diffText}`;
+  return `
+    <div class="setup-history-item">
+      <div class="setup-history-main">
+        <div class="setup-history-line">${line}</div>
+        <div class="setup-history-meta">${escapeHtml(meta)}</div>
+      </div>
+      <div class="setup-history-side">
+        <div class="setup-history-outcome is-${entry.outcome || 'loss'}">${escapeHtml(getHistoryOutcomeText(entry.outcome))}</div>
+        <div class="setup-history-time">${escapeHtml(entry.durationText || formatMatchTime(entry.durationMs || 0))}</div>
+      </div>
+    </div>
+  `;
+}
+
+function refreshPersistentProgress() {
+  const stats = persistentProfile?.stats;
+  const matches = Array.isArray(persistentProfile?.matches) ? persistentProfile.matches : [];
+  const unlockedTitles = Array.isArray(persistentProfile?.titles?.unlocked)
+    ? persistentProfile.titles.unlocked
+        .slice()
+        .sort((a, b) => {
+          const aTime = Date.parse(a.lastAwardedAt || a.unlockedAt || 0);
+          const bTime = Date.parse(b.lastAwardedAt || b.unlockedAt || 0);
+          return bTime - aTime;
+        })
+    : [];
+  const matchesEl = document.getElementById('stats-total-matches');
+  const winRateEl = document.getElementById('stats-win-rate');
+  const streakEl = document.getElementById('stats-current-streak');
+  const bestEl = document.getElementById('stats-best-streak');
+  const avgTimeEl = document.getElementById('stats-average-time');
+  const lastPlayedEl = document.getElementById('stats-last-played');
+  const historyListEl = document.getElementById('setup-history-list');
+  const historyEmptyEl = document.getElementById('setup-history-empty');
+  const titleListEl = document.getElementById('setup-title-list');
+  const titleEmptyEl = document.getElementById('setup-titles-empty');
+  const titleCountEl = document.getElementById('setup-title-count');
+
+  if (!stats) return;
+
+  if (matchesEl) {
+    matchesEl.textContent = String(stats.totalMatches || 0);
+    matchesEl.title = t().statsSummaryWlt
+      .replace('{wins}', String(stats.totalWins || 0))
+      .replace('{losses}', String(stats.totalLosses || 0))
+      .replace('{draws}', String(stats.totalDraws || 0));
+  }
+  if (winRateEl) winRateEl.textContent = `${Math.round((stats.winRate || 0) * 100)}%`;
+  if (streakEl) streakEl.textContent = String(stats.currentStreak || 0);
+  if (bestEl) bestEl.textContent = String(stats.bestStreak || 0);
+  if (avgTimeEl) avgTimeEl.textContent = stats.averageMatchDurationMs > 0 ? formatMatchTime(stats.averageMatchDurationMs) : '--:--';
+  if (lastPlayedEl) lastPlayedEl.textContent = formatCompactDateLabel(stats.lastPlayedAt);
+
+  if (historyListEl) {
+    const recent = matches.slice(0, 5);
+    historyListEl.innerHTML = recent.map(buildRecentHistoryItem).join('');
+    if (historyEmptyEl) historyEmptyEl.classList.toggle('show', recent.length === 0);
+  }
+
+  if (titleCountEl) {
+    titleCountEl.textContent = t().statsTitleCount.replace('{n}', String(unlockedTitles.length));
+  }
+
+  if (titleListEl) {
+    const visibleTitles = unlockedTitles.slice(0, 8);
+    titleListEl.innerHTML = visibleTitles.map(title => {
+      const titleText = getTitleText(title.key);
+      const classes = [
+        'setup-title-chip',
+        title.source === 'career' ? 'is-career' : 'is-match',
+        persistentProfile?.titles?.lastShownKey === title.key ? 'is-recent' : '',
+      ].filter(Boolean).join(' ');
+      return `<span class="${classes}">${escapeHtml(titleText || title.key)}</span>`;
+    }).join('');
+    if (titleEmptyEl) titleEmptyEl.classList.toggle('show', visibleTitles.length === 0);
+  }
 }
 
 function updateReplayButtonState() {
@@ -447,32 +577,44 @@ function updateResultFlavorText() {
 
 function getExportSummaryRows() {
   return buildExportSummaryRows({
-    t,
-    resultSummaryPlayer,
-    resultSummaryTitleKey,
-    getTitleText,
-    getModeSummaryText,
-    matchElapsedMs,
-    formatMatchTime,
-    opponentType,
-    gameMode,
-    getDifficultySummaryText,
-    formatExportDateLabel,
+    labels: {
+      player: t().exportLabelPlayer,
+      title: t().exportLabelTitle,
+      mode: t().exportLabelMode,
+      time: t().exportLabelTime,
+      difficulty: t().exportLabelDifficulty,
+      date: t().exportDate.toUpperCase(),
+    },
+    playerText: resultSummaryPlayer || '',
+    titleText: resultSummaryTitleKey ? getTitleText(resultSummaryTitleKey) : '',
+    modeText: getModeSummaryText(),
+    timeText: matchElapsedMs > 0 ? formatMatchTime(matchElapsedMs) : '--:--',
+    showDifficulty: opponentType === 'bot' && gameMode === 'duel',
+    difficultyText: getDifficultySummaryText(),
+    dateLabel: formatExportDateLabel(),
   });
 }
 
 function updateResultSummary() {
   applyResultSummary({
-    document,
-    t,
-    resultSummaryState,
-    resultSummaryPlayer,
-    resultSummaryTitleKey,
-    getTitleText,
-    getModeSummaryText,
-    opponentType,
-    gameMode,
-    getDifficultySummaryText,
+    elements: {
+      stateEl: document.getElementById('result-summary-state'),
+      playerEl: document.getElementById('result-summary-player'),
+      titleRow: document.getElementById('result-summary-row-title'),
+      titleEl: document.getElementById('result-summary-title'),
+      modeEl: document.getElementById('result-summary-mode'),
+      difficultyRow: document.getElementById('result-summary-row-difficulty'),
+      difficultyEl: document.getElementById('result-summary-difficulty'),
+    },
+    values: {
+      hasSummary: Boolean(resultSummaryState),
+      stateText: resultSummaryState === 'loss' ? t().resultDefeat : t().resultVictory,
+      playerText: resultSummaryPlayer || '',
+      titleText: resultSummaryTitleKey ? getTitleText(resultSummaryTitleKey) : '',
+      modeText: getModeSummaryText(),
+      showDifficulty: Boolean(resultSummaryState) && opponentType === 'bot' && gameMode === 'duel',
+      difficultyText: getDifficultySummaryText(),
+    },
   });
 }
 
@@ -531,14 +673,18 @@ function scheduleResultReveal(callback, delay = RESULT_REVEAL_DELAY) {
 function exportResultCard() {
   if (!gameOver || !resultSummaryState) return;
   downloadResultCard({
-    document,
-    window,
-    t,
-    resultSummaryState,
-    resultSummaryPlayer,
-    getExportSummaryRows,
-    getResultFlavorText,
-    formatExportDateLabel,
+    documentRef: document,
+    devicePixelRatio: window.devicePixelRatio || 1,
+    resultState: resultSummaryState,
+    resultTitle: resultSummaryState === 'loss' ? t().resultDefeat : t().resultVictory,
+    playerText: resultSummaryPlayer || 'VANISH',
+    flavorText: getResultFlavorText(),
+    rows: getExportSummaryRows(),
+    dateLabel: formatExportDateLabel(),
+    filenameBase: (resultSummaryPlayer || 'vanish')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/gi, '-')
+      .replace(/^-+|-+$/g, '') || 'vanish',
   });
 }
 
@@ -934,6 +1080,8 @@ const MAX_MARKS  = 3;
 let board, marks, currentPlayer, isAnimating, gameOver, score,
     historyCounter, historyData, ownMarkVanishedThisTurn;
 let botMoveTimer = null;
+let appInitialized = false;
+let tgUser = null;
 
 function initState() {
   board                   = Array(9).fill(null);
@@ -1734,6 +1882,35 @@ function syncWindowAppState() {
   };
 }
 
+function registerGlobalUiHandlers() {
+  if (typeof window === 'undefined') return;
+  Object.assign(window, {
+    openSetup,
+    openRules,
+    closeRules,
+    closeRulesOnBackdrop,
+    selectMode,
+    selectOpponentType,
+    selectBotDifficulty,
+    selectRoundCount,
+    startFromSetup,
+    closeDailyInfoOnBackdrop,
+    startDailyChallenge,
+    closeDailyInfo,
+    exportResultCard,
+    handleAgainButton,
+    handleMenuButton,
+    playLatestMatchReplay,
+    refreshLocalizedUi,
+    syncAvailableModes,
+    updateModeBadge,
+    setResultPresentation,
+    syncRankedLockState,
+    syncLocalizedOpponentName,
+    refreshPersistentProgress,
+  });
+}
+
 function refreshLocalizedUi() {
   updateSetupNicknameFields();
   updateModeBadge();
@@ -1743,11 +1920,19 @@ function refreshLocalizedUi() {
   updateAgainButtonLabel();
   syncRankedLockState();
   syncLocalizedOpponentName();
+  refreshPersistentProgress();
   updateReplayButtonState();
   syncWindowAppState();
 }
 
 function initApp() {
+  if (appInitialized) return;
+  appInitialized = true;
+  registerGlobalUiHandlers();
+  const setupStartBtn = document.getElementById('btn-setup-start');
+  if (setupStartBtn) {
+    setupStartBtn.addEventListener('click', startFromSetup);
+  }
   document.addEventListener('click', e => {
     const menuControl = e.target.closest('.btn, .lang-btn, .mode-btn, .sound-btn, .setup-music-toggle, .setup-opponent-btn, .setup-bot-btn, .setup-round-btn');
     if (!menuControl) return;
@@ -1761,6 +1946,7 @@ function initApp() {
   initState();
   buildBoard();
   render();
+  refreshPersistentProgress();
   updateReplayButtonState();
 
   tgUser = getTelegramUser();

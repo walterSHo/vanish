@@ -17,6 +17,91 @@ For each new entry use:
 
 ## Entries
 
+### 2026-04-17 14:20 - Split menu into progress panel and main play area
+- Goal:
+  Improve setup usability by moving Progress out of the main scroll flow and making gameplay modes immediately accessible again.
+- Files changed:
+  - index.html
+  - css/styles.css
+  - CHANGELOG_AI.md
+- What was changed:
+  Reworked the setup modal into a two-zone layout with a dedicated left-side progress panel and a separate main play/menu pane, added responsive stacking for smaller screens, and kept the Daily Challenge mode button present in the main mode selector so it remains visible and functional for bot play.
+- Why:
+  The previous stacked setup layout made the progression section compete with the actual play actions and could push the mode selector into awkward scrolling. This separation restores clearer hierarchy while preserving the existing VANISH menu polish.
+- Notes / follow-up:
+  Daily/Challenge mode was verified to still exist in the DOM and in the bot-mode availability logic; this pass restores its practical visibility through layout rather than gameplay-side changes.
+
+---
+
+### 2026-04-17 13:55 - Expanded title and epithet progression system
+- Goal:
+  Turn persistent stats and match history into a readable identity system with earned epithets and long-term unlocked titles.
+- Files changed:
+  - index.html
+  - css/styles.css
+  - js/app.js
+  - js/modules/storage.js
+  - js/i18n.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Refined the title engine into a more data-driven rule set with priorities and a clear split between temporary match epithets and persistent career unlocks, added several new style-based titles, fixed localized title resolution in the UI/export flow, and introduced a compact unlocked-titles collection inside the setup progression panel.
+- Why:
+  The project already had a basic title foundation, but it was too narrow and too hidden to feel like a real progression layer. This pass makes titles feel earned, understandable, and visible without cluttering the interface.
+- Notes / follow-up:
+  Match epithets now drive the result summary when appropriate, while long-term titles accumulate in the local collection for future expansion.
+
+---
+
+### 2026-04-17 13:25 - Added persistent stats and match history foundation
+- Goal:
+  Make completed matches matter across sessions and create a clean local progression base for future titles and replay work.
+- Files changed:
+  - index.html
+  - css/styles.css
+  - js/app.js
+  - js/modules/storage.js
+  - js/i18n.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Extended the local persistent profile schema with draw support and last-played tracking, exposed replay-friendly match events explicitly in saved entries, and added a compact setup-side progression panel that shows long-term stats plus recent completed matches from browser storage.
+- Why:
+  The project already had internal replay/title groundwork, but the player still had no visible continuity between sessions. This pass turns that hidden base into a real progression layer without overloading the main menu or touching gameplay rules.
+- Notes / follow-up:
+  Data remains fully local in the browser and is structured so future title/epithet logic and deeper replay features can build on the same saved profile and match records.
+
+---
+
+### 2026-04-17 13:00 - Polished main menu micro-animations
+- Goal:
+  Make the setup/menu UI feel more premium, alive, and satisfying while preserving the current VANISH layout and responsiveness.
+- Files changed:
+  - css/styles.css
+  - CHANGELOG_AI.md
+- What was changed:
+  Added a soft staggered entrance for setup sections, richer ambient treatment for setup cards and grouped controls, more magnetic hover/press feedback for primary and secondary buttons, livelier active-state breathing for menu selections, and cleaner hover polish for language/audio controls.
+- Why:
+  The menu already worked visually, but it still felt more static than the rest of the game. These motion upgrades improve perceived quality and responsiveness without slowing interactions down or turning the UI noisy.
+- Notes / follow-up:
+  This is a menu-only polish pass. Gameplay logic and setup behavior were not changed.
+
+---
+
+### 2026-04-17 12:35 - Polished game feel and pacing
+- Goal:
+  Make core VANISH interactions feel more alive and rewarding without changing rules or redesigning the interface.
+- Files changed:
+  - css/styles.css
+  - js/app.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Slightly extended the final result reveal delay so the decisive move has more time to land, strengthened placement and vanish VFX with a little more glow/trace detail, added a subtler combo shimmer layer, improved setup and result overlay entrance feel, and gave buttons/toggles/tabs cleaner hover and press feedback.
+- Why:
+  The game already had strong style, but key actions still needed a bit more payoff and smoother pacing to feel premium and satisfying in play.
+- Notes / follow-up:
+  This is a polish pass only. Gameplay rules and flow remain unchanged.
+
+---
+
 ### 2026-04-15 19:00 - Initial AI memory setup
 - Goal:
   Create persistent project memory files for Codex.
@@ -904,3 +989,110 @@ For each new entry use:
   The previous feedback was stylish but a bit too restrained in the exact moments that sell the mechanic. This pass increases clarity and satisfaction on placement, imminent vanish, and decisive board events without changing any gameplay rules or cluttering the board.
 - Notes / follow-up:
   This was kept framework-free and lightweight with a small JS hook plus CSS animation and pseudo-elements. Gameplay flow and logic remain unchanged.
+
+---
+
+### 2026-04-17 06:20 - Fixed Start button regression after modular UI refactor
+- Goal:
+  Restore the full Start-to-playable-match flow after the recent modular/menu/result changes.
+- Files changed:
+  - js/app.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Added a small global handler registration step inside `app.js` and guarded `initApp()` against double initialization. The setup screen's inline `Start` action now always resolves to the live `startFromSetup()` entry point from the gameplay module itself instead of relying on a more fragile external bridge to expose the handler.
+- Why:
+  The recent module/bootstrap refactor introduced a brittle dependency between the setup button's inline HTML handler and external window binding. That made the start flow vulnerable to bootstrap timing/order issues and could leave the Start button clickable without actually reaching the playable match initialization path.
+- Notes / follow-up:
+  This is a regression fix only. The playable-match initialization flow, overlays, replay flow, and gameplay rules were left intact.
+
+---
+
+### 2026-04-17 06:35 - Bound Start directly to the setup button after click-path regression
+- Goal:
+  Make the setup Start button reliably clickable and ensure it always enters a fresh playable match.
+- Files changed:
+  - index.html
+  - js/app.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Removed the Start button's inline `onclick` dependency and bound it directly inside `initApp()` with a DOM click listener to `startFromSetup()`. The button was also made explicitly `type="button"` so its behavior is fully controlled by the app runtime.
+- Why:
+  After the recent modular/UI refactor, the Start flow was still too dependent on a fragile global-inline bridge. The inspected setup/result overlay CSS did not show a blocking layer over the button, so the reliable fix was to harden the click path itself and attach the button straight to the real start handler.
+- Notes / follow-up:
+  This keeps the setup/game transition logic unchanged and localizes the fix to the Start entry point rather than broad UI rewiring.
+
+---
+
+### 2026-04-17 06:45 - Fixed module-init crash that still blocked Start flow
+- Goal:
+  Restore real app startup so the setup Start button can launch a match again.
+- Files changed:
+  - js/app.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Declared the missing `tgUser` state variable inside `app.js`. After the recent ES-module refactor, `app.js` was running in strict mode, and assigning to undeclared `tgUser` during initialization could abort the entire app bootstrap before the setup flow became functional.
+- Why:
+  This was a deeper regression than the button binding itself: if module initialization crashes early, Start appears present in the UI but no reliable game-start logic is alive behind it. The mention of an unexpected “email-like” issue was a good clue that startup state/bootstrap had gone wrong rather than the nickname input itself.
+- Notes / follow-up:
+  This is a narrow runtime-fix for module bootstrap. No gameplay rules or setup UX were changed.
+
+---
+
+### 2026-04-17 07:00 - Fixed broken module wrapper calls that aborted Start flow
+- Goal:
+  Restore the real Start-to-game transition by fixing the runtime error triggered on match initialization.
+- Files changed:
+  - js/app.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Corrected several wrapper calls in `app.js` so they match the APIs of the extracted storage and result-screen modules. Most importantly, `updateResultSummary()` now passes the proper `elements/values` structure into `applyResultSummary()`, which prevents `clearMatchTimer()` from throwing during the Start path. The match-history/profile wrappers were also aligned with the storage module’s current argument shape so post-start and post-match flows stay coherent.
+- Why:
+  After the modular refactor, the Start button could successfully fire while the actual start flow still crashed inside helper wrappers that were calling the new modules with outdated argument shapes. That made the UI look like “nothing happens” even though the real failure was a runtime exception in the freshly modularized start/reset path.
+- Notes / follow-up:
+  This is still a localized regression fix. Gameplay rules and screen design were not changed.
+
+---
+
+### 2026-04-17 07:10 - Split placement animation personality between X and O
+- Goal:
+  Make each faction feel more distinct and improve placement feedback without changing game speed or rules.
+- Files changed:
+  - css/styles.css
+  - CHANGELOG_AI.md
+- What was changed:
+  Refined the mark-placement animation family so the two factions no longer share the same accent behavior. X now lands with a sharper angular lock-in, framed signal burst, and lattice-style strike energy, while O now phases in with a smoother halo bloom and orbital ring motion. Both remain quick, readable, and stylistically aligned with the existing VANISH neon language.
+- Why:
+  The previous placement work already improved feel, but the two mark types were still too close in motion personality. This pass makes the distinction more meaningful without adding noise or touching gameplay logic.
+- Notes / follow-up:
+  This was a CSS-only polish pass. JS placement flow and gameplay timing were left unchanged.
+
+---
+
+### 2026-04-17 07:20 - Split victory motion character between X and O wins
+- Goal:
+  Make each winning side feel unique while keeping the final board readable and the result pacing polished.
+- Files changed:
+  - css/styles.css
+  - CHANGELOG_AI.md
+- What was changed:
+  Reworked the winning-line animation family so `win-cipher` and `win-wraith` no longer share the same motion pattern. X wins now hit with sharper framed pulses, faster signal-strike sweeps, and more angular lock-in energy, while O wins now resolve through smoother ring expansion, softer wave-like sweeps, and more resonant orbital breathing on the winning marks.
+- Why:
+  The previous victory presentation already looked good, but both winners still felt like one animation system with a color swap. This pass gives the two factions clearer identity at the exact moment of victory without adding extra UI complexity or changing result logic.
+- Notes / follow-up:
+  This was kept as a lightweight CSS-only polish pass layered on top of the existing line-complete and result flow.
+
+---
+
+### 2026-04-17 07:35 - Redesigned the PNG result export into a premium share card
+- Goal:
+  Make the downloaded result image feel intentionally designed, dramatic, and share-worthy inside the VANISH visual identity.
+- Files changed:
+  - js/app.js
+  - js/modules/result-screen.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Reworked the existing canvas export path into a dedicated cinematic result card with a stronger hero section, larger outcome typography, clearer player/title hierarchy, cleaner summary breakdown, refined HUD-like framing lines, and a more atmospheric neon-dark background treatment. The export now also receives the localized result title from `app.js`, so the share card preserves the current language more cleanly instead of falling back to a generic built-in label.
+- Why:
+  The previous export contained the right information, but it still looked closer to a functional data block than a designed share image. This pass gives the PNG a more premium composition without changing the export mechanism or adding dependencies.
+- Notes / follow-up:
+  The browser-safe static export flow was preserved. This is a presentation-only redesign of the existing PNG generation path.
