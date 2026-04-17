@@ -866,3 +866,41 @@ For each new entry use:
   The match already had persistent move history and final-result presentation, but there was no way to revisit the final flow itself. Reusing saved turns creates a lightweight and maintainable foundation for future history-entry replay too.
 - Notes / follow-up:
   This first pass supports the most recent finished match through the existing saved history structure. Gameplay rules and live-match behavior were not changed.
+
+---
+
+### 2026-04-17 05:45 - Started modular vanilla-JS architecture refactor
+- Goal:
+  Reduce coupling inside the large runtime script and introduce a practical module foundation without changing gameplay behavior.
+- Files changed:
+  - index.html
+  - js/app.js
+  - js/audio.js
+  - js/i18n.js
+  - js/main.js
+  - js/modules/storage.js
+  - js/modules/result-screen.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Switched the app bootstrap to a `type="module"` entry point in `js/main.js`, kept inline HTML controls working by exposing the needed handlers on `window`, and converted `app.js`, `audio.js`, and `i18n.js` into module-friendly pieces. Extracted persistent storage and match-history/title update logic into `js/modules/storage.js`, and moved result-summary / PNG export rendering helpers into `js/modules/result-screen.js`. `app.js` now acts as the main gameplay coordinator while delegating storage and result-screen responsibilities to focused modules.
+- Why:
+  The previous single-file structure had grown large enough that storage, export, replay foundation, and gameplay flow were tightly mixed together. This first modular pass improves maintainability and creates a safe base for further extraction without rewriting the project or changing the current game flow.
+- Notes / follow-up:
+  This is an incremental refactor, not a full architecture rewrite. Gameplay rules, UI behavior, audio behavior, and existing features were intentionally preserved while introducing the first practical module boundaries.
+
+---
+
+### 2026-04-17 06:05 - Strengthened vanish feel, placement feedback, and key-moment particles
+- Goal:
+  Make the board interactions feel juicier and more responsive while preserving VANISH readability and style.
+- Files changed:
+  - index.html
+  - css/styles.css
+  - js/app.js
+  - CHANGELOG_AI.md
+- What was changed:
+  Made the vanish-target mark animation more noticeable by tightening the phase timing and deepening the symbol instability for both factions while keeping the warning on the mark itself. Replaced the simple mark spawn with faction-specific placement animations plus a lightweight cell impact pulse, and slightly boosted particle-like glow bursts for normal vanish, combo vanish, and three-in-a-row highlight moments using CSS-driven effects.
+- Why:
+  The previous feedback was stylish but a bit too restrained in the exact moments that sell the mechanic. This pass increases clarity and satisfaction on placement, imminent vanish, and decisive board events without changing any gameplay rules or cluttering the board.
+- Notes / follow-up:
+  This was kept framework-free and lightweight with a small JS hook plus CSS animation and pseudo-elements. Gameplay flow and logic remain unchanged.

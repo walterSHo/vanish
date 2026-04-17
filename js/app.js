@@ -1,3 +1,25 @@
+import { t } from './i18n.js';
+import {
+  SFX,
+  ensureMusicFromUserGesture,
+} from './audio.js';
+import {
+  STORAGE_KEY as VANISH_STORAGE_KEY_MODULE,
+  loadPersistentProfile as loadPersistentProfileFromModule,
+  savePersistentProfile as savePersistentProfileFromModule,
+  cloneBoardState as cloneBoardStateFromModule,
+  cloneMarksState as cloneMarksStateFromModule,
+  createMatchRecord,
+  createMatchHistoryEntry,
+  resolveTitleText,
+  updateProfileWithCompletedMatch,
+} from './modules/storage.js';
+import {
+  buildExportSummaryRows,
+  applyResultSummary,
+  downloadResultCard,
+} from './modules/result-screen.js';
+
 // ─── SVG SYMBOLS ─────────────────────────────────────────────────────────────
 function cipherSVG(color, size) {
   color = color || '#00eeff';
@@ -121,186 +143,27 @@ let resultFlavorLine = '';
 let lastResultFlavorLine = '';
 let resultRevealTimer = null;
 const RESULT_REVEAL_DELAY = 720;
-const VANISH_STORAGE_KEY = 'vanish-local-save';
-const VANISH_STORAGE_VERSION = 1;
-const VANISH_MATCH_HISTORY_LIMIT = 250;
+const VANISH_STORAGE_KEY = VANISH_STORAGE_KEY_MODULE;
 let persistentProfile = null;
 let currentMatchRecord = null;
 let currentMatchSaved = false;
 let replayPlaybackTimer = null;
 let replayFinalFocusTimer = null;
 let isReplayMode = false;
-const TITLE_RULES = [
-  {
-    key: 'merciless',
-    source: 'career',
-    matches: ctx => ctx.outcome === 'win' && ctx.stats.currentStreak >= 5,
-  },
-  {
-    key: 'rhythmBreaker',
-    source: 'match',
-    matches: ctx => ctx.outcome === 'win' && ctx.entry.opponentType === 'bot' && ctx.entry.difficulty === 'xo',
-  },
-  {
-    key: 'signalBinder',
-    source: 'career',
-    matches: ctx => ctx.outcome === 'win'
-      && ctx.entry.playerSide === 'cipher'
-      && ctx.stats.sidesPlayed.cipher >= 8
-      && ctx.stats.sidesPlayed.cipher >= ctx.stats.sidesPlayed.wraith + 3,
-  },
-  {
-    key: 'boardPhantom',
-    source: 'career',
-    matches: ctx => ctx.outcome === 'win'
-      && ctx.entry.playerSide === 'wraith'
-      && ctx.stats.sidesPlayed.wraith >= 8
-      && ctx.stats.sidesPlayed.wraith >= ctx.stats.sidesPlayed.cipher + 3,
-  },
-  {
-    key: 'challengeShade',
-    source: 'career',
-    matches: ctx => ctx.outcome === 'win'
-      && ctx.entry.gameMode === 'daily'
-      && ctx.matches.filter(match => match.outcome === 'win' && match.gameMode === 'daily').length >= 3,
-  },
-  {
-    key: 'coldblooded',
-    source: 'match',
-    matches: ctx => ctx.outcome === 'win'
-      && (ctx.entry.durationMs > 0 && ctx.entry.durationMs <= 25000 || ctx.entry.statsContext.totalTurns <= 5),
-  },
-  {
-    key: 'lastPulse',
-    source: 'match',
-    matches: ctx => ctx.outcome === 'win'
-      && ctx.entry.statsContext.totalTurns >= 7
-      && ctx.entry.durationMs <= 65000,
-  },
-  {
-    key: 'silentHunter',
-    source: 'match',
-    matches: ctx => ctx.outcome === 'win'
-      && (ctx.entry.durationMs >= 90000 || ctx.entry.statsContext.totalTurns >= 8),
-  },
-];
-
-function safeParseJSON(value) {
-  if (!value) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-function createDefaultPersistentProfile() {
-  return {
-    schemaVersion: VANISH_STORAGE_VERSION,
-    stats: {
-      totalMatches: 0,
-      totalWins: 0,
-      totalLosses: 0,
-      winRate: 0,
-      currentStreak: 0,
-      bestStreak: 0,
-      totalDurationMs: 0,
-      averageMatchDurationMs: 0,
-      sidesPlayed: { cipher: 0, wraith: 0 },
-      modesPlayed: { duel: 0, ranked: 0, daily: 0 },
-      difficultiesPlayed: { baby: 0, norm: 0, xo: 0 },
-      updatedAt: null,
-    },
-    titles: {
-      unlocked: [],
-      lastShownKey: null,
-      updatedAt: null,
-    },
-    matches: [],
-  };
-}
-
-function normalizeCounterMap(raw, keys) {
-  return keys.reduce((acc, key) => {
-    const value = Number(raw && raw[key]);
-    acc[key] = Number.isFinite(value) && value >= 0 ? value : 0;
-    return acc;
-  }, {});
-}
-
-function normalizePersistentProfile(raw) {
-  const base = createDefaultPersistentProfile();
-  if (!raw || typeof raw !== 'object') return base;
-
-  const stats = raw.stats && typeof raw.stats === 'object' ? raw.stats : {};
-  const totalMatches = Number(stats.totalMatches);
-  const totalWins = Number(stats.totalWins);
-  const totalLosses = Number(stats.totalLosses);
-  const totalDurationMs = Number(stats.totalDurationMs);
-  const currentStreak = Number(stats.currentStreak);
-  const bestStreak = Number(stats.bestStreak);
-
-  base.stats.totalMatches = Number.isFinite(totalMatches) && totalMatches >= 0 ? totalMatches : 0;
-  base.stats.totalWins = Number.isFinite(totalWins) && totalWins >= 0 ? totalWins : 0;
-  base.stats.totalLosses = Number.isFinite(totalLosses) && totalLosses >= 0 ? totalLosses : 0;
-  base.stats.totalDurationMs = Number.isFinite(totalDurationMs) && totalDurationMs >= 0 ? totalDurationMs : 0;
-  base.stats.currentStreak = Number.isFinite(currentStreak) && currentStreak >= 0 ? currentStreak : 0;
-  base.stats.bestStreak = Number.isFinite(bestStreak) && bestStreak >= 0 ? bestStreak : 0;
-  base.stats.sidesPlayed = normalizeCounterMap(stats.sidesPlayed, ['cipher', 'wraith']);
-  base.stats.modesPlayed = normalizeCounterMap(stats.modesPlayed, ['duel', 'ranked', 'daily']);
-  base.stats.difficultiesPlayed = normalizeCounterMap(stats.difficultiesPlayed, ['baby', 'norm', 'xo']);
-  base.stats.updatedAt = typeof stats.updatedAt === 'string' ? stats.updatedAt : null;
-
-  if (base.stats.totalMatches > 0) {
-    base.stats.winRate = Number((base.stats.totalWins / base.stats.totalMatches).toFixed(4));
-    base.stats.averageMatchDurationMs = Math.round(base.stats.totalDurationMs / base.stats.totalMatches);
-  }
-
-  base.matches = Array.isArray(raw.matches)
-    ? raw.matches.filter(entry => entry && typeof entry === 'object').slice(0, VANISH_MATCH_HISTORY_LIMIT)
-    : [];
-
-  const titles = raw.titles && typeof raw.titles === 'object' ? raw.titles : {};
-  base.titles.unlocked = Array.isArray(titles.unlocked)
-    ? titles.unlocked
-        .filter(entry => entry && typeof entry === 'object' && typeof entry.key === 'string')
-        .map(entry => ({
-          key: entry.key,
-          source: entry.source === 'career' ? 'career' : 'match',
-          unlockedAt: typeof entry.unlockedAt === 'string' ? entry.unlockedAt : null,
-          lastAwardedAt: typeof entry.lastAwardedAt === 'string' ? entry.lastAwardedAt : null,
-        }))
-    : [];
-  base.titles.lastShownKey = typeof titles.lastShownKey === 'string' ? titles.lastShownKey : null;
-  base.titles.updatedAt = typeof titles.updatedAt === 'string' ? titles.updatedAt : null;
-
-  return base;
-}
-
 function loadPersistentProfile() {
-  if (typeof window === 'undefined' || !window.localStorage) return createDefaultPersistentProfile();
-  const raw = safeParseJSON(window.localStorage.getItem(VANISH_STORAGE_KEY));
-  return normalizePersistentProfile(raw);
+  return loadPersistentProfileFromModule();
 }
 
 function savePersistentProfile() {
-  if (!persistentProfile || typeof window === 'undefined' || !window.localStorage) return;
-  try {
-    window.localStorage.setItem(VANISH_STORAGE_KEY, JSON.stringify(persistentProfile));
-  } catch {
-    // Ignore storage quota or privacy-mode failures and keep gameplay unaffected.
-  }
+  savePersistentProfileFromModule(persistentProfile);
 }
 
 function cloneBoardState(state) {
-  return Array.isArray(state) ? state.slice() : Array(9).fill(null);
+  return cloneBoardStateFromModule(state);
 }
 
 function cloneMarksState(state) {
-  return {
-    cipher: Array.isArray(state && state.cipher) ? state.cipher.map(mark => ({ cell: mark.cell, histId: mark.histId || 0 })) : [],
-    wraith: Array.isArray(state && state.wraith) ? state.wraith.map(mark => ({ cell: mark.cell, histId: mark.histId || 0 })) : [],
-  };
+  return cloneMarksStateFromModule(state);
 }
 
 function createMatchSnapshot() {
@@ -311,41 +174,23 @@ function createMatchSnapshot() {
   };
 }
 
-function createMatchRecordId() {
-  return `match_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
 function beginMatchRecord(extra = {}) {
   currentMatchSaved = false;
-  currentMatchRecord = {
-    id: createMatchRecordId(),
-    startedAt: new Date().toISOString(),
+  currentMatchRecord = createMatchRecord({
     gameMode,
     opponentType,
-    botDifficulty: opponentType === 'bot' ? selectedBotDifficulty : null,
-    playerSide: currentUserFaction,
-    opponentSide: oppositeFaction(currentUserFaction),
+    selectedBotDifficulty,
+    currentUserFaction,
     currentUserName,
-    playerNames: {
-      cipher: nicknames.cipher || '',
-      wraith: nicknames.wraith || '',
-    },
-    round: {
-      current: currentRoundNumber(),
-      total: matchRoundTotal,
-    },
+    nicknames,
+    matchRoundTotal,
+    currentRoundNumber: currentRoundNumber(),
     initialState: createMatchSnapshot(),
-    daily: gameMode === 'daily' && dailyChallenge
-      ? {
-          date: dailyChallenge.dateStr,
-          seed: dailyChallenge.seed,
-          moveLimit: dailyChallenge.moveLimit,
-          objective: dailyChallenge.objective,
-          preBoard: cloneBoardState(dailyChallenge.preBoard),
-        }
-      : null,
+    dailyChallenge,
+    oppositeFaction,
+    cloneBoardState,
     ...extra,
-  };
+  });
 }
 
 function resetMatchRecord() {
@@ -354,103 +199,31 @@ function resetMatchRecord() {
 }
 
 function buildMatchHistoryEntry(outcome, winnerFaction = null) {
-  const nowIso = new Date().toISOString();
-  const durationMs = Math.max(0, matchElapsedMs || 0);
-  const turns = historyData.map((entry, idx) => ({
-    turn: idx + 1,
-    id: entry.id,
-    player: entry.player,
-    cell: entry.cell,
-    label: entry.label,
-    erased: Boolean(entry.erased),
-    erasedOnTurn: entry.erasedOnTurn || null,
-  }));
-
-  return {
-    schemaVersion: VANISH_STORAGE_VERSION,
-    id: currentMatchRecord?.id || createMatchRecordId(),
-    savedAt: nowIso,
-    startedAt: currentMatchRecord?.startedAt || nowIso,
-    gameMode,
-    opponentType,
-    difficulty: opponentType === 'bot' ? selectedBotDifficulty : null,
+  return createMatchHistoryEntry({
+    currentMatchRecord,
     outcome,
     winnerFaction,
-    winnerName: winnerFaction ? playerDisplayName(winnerFaction) : null,
-    playerSide: currentUserFaction,
-    opponentSide: oppositeFaction(currentUserFaction),
-    durationMs,
-    durationText: formatMatchTime(durationMs),
-    timestamp: nowIso,
-    date: nowIso.slice(0, 10),
-    round: currentMatchRecord?.round || { current: currentRoundNumber(), total: matchRoundTotal },
-    playerNames: currentMatchRecord?.playerNames || {
-      cipher: nicknames.cipher || '',
-      wraith: nicknames.wraith || '',
-    },
+    gameMode,
+    opponentType,
+    selectedBotDifficulty,
+    currentUserFaction,
     currentUserName,
-    initialState: currentMatchRecord?.initialState || createMatchSnapshot(),
-    finalState: createMatchSnapshot(),
-    turns,
-    statsContext: {
-      totalTurns: turns.length,
-      score: { cipher: score.cipher, wraith: score.wraith },
-      resultSummaryState,
-    },
-    daily: currentMatchRecord?.daily || null,
-    title: null,
-  };
+    nicknames,
+    matchRoundTotal,
+    currentRoundNumber: currentRoundNumber(),
+    matchElapsedMs,
+    historyData,
+    score,
+    resultSummaryState,
+    playerDisplayName,
+    oppositeFaction,
+    createMatchSnapshot,
+    formatMatchTime,
+  });
 }
 
 function getTitleText(key) {
-  return key ? (t().titles?.[key] || '') : '';
-}
-
-function unlockTitle(key, source, timestamp) {
-  if (!persistentProfile) return;
-  const unlocked = persistentProfile.titles.unlocked;
-  const existing = unlocked.find(entry => entry.key === key);
-  if (existing) {
-    existing.source = source === 'career' ? 'career' : existing.source;
-    existing.lastAwardedAt = timestamp;
-    return existing;
-  }
-  const record = {
-    key,
-    source: source === 'career' ? 'career' : 'match',
-    unlockedAt: timestamp,
-    lastAwardedAt: timestamp,
-  };
-  unlocked.push(record);
-  return record;
-}
-
-function resolveFallbackTitle(entry) {
-  if (!persistentProfile || !persistentProfile.titles.unlocked.length) return '';
-  const unlocked = persistentProfile.titles.unlocked.slice().sort((a, b) => {
-    const aTime = Date.parse(a.lastAwardedAt || a.unlockedAt || 0);
-    const bTime = Date.parse(b.lastAwardedAt || b.unlockedAt || 0);
-    return bTime - aTime;
-  });
-
-  if (entry.playerSide === 'cipher' && unlocked.some(item => item.key === 'signalBinder')) return 'signalBinder';
-  if (entry.playerSide === 'wraith' && unlocked.some(item => item.key === 'boardPhantom')) return 'boardPhantom';
-  return unlocked[0]?.key || '';
-}
-
-function resolveEntryTitles(entry, statsSnapshot, prospectiveMatches) {
-  const context = {
-    entry,
-    outcome: entry.outcome,
-    stats: statsSnapshot,
-    matches: prospectiveMatches,
-  };
-  const qualified = TITLE_RULES.filter(rule => rule.matches(context));
-  const awardedKeys = qualified.map(rule => rule.key);
-  const selectedRule = qualified[0] || null;
-  const selectedKey = selectedRule?.key || resolveFallbackTitle(entry);
-  const selectedSource = selectedRule?.source || (selectedKey ? 'identity' : null);
-  return { qualified, awardedKeys, selectedKey, selectedSource };
+  return resolveTitleText(key, t);
 }
 
 function persistCompletedMatch(outcome, winnerFaction = null) {
@@ -458,43 +231,13 @@ function persistCompletedMatch(outcome, winnerFaction = null) {
   if (!persistentProfile) persistentProfile = loadPersistentProfile();
 
   const entry = buildMatchHistoryEntry(outcome, winnerFaction);
-  const stats = persistentProfile.stats;
-  stats.totalMatches += 1;
-  if (outcome === 'win') {
-    stats.totalWins += 1;
-    stats.currentStreak += 1;
-    stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
-  } else {
-    stats.totalLosses += 1;
-    stats.currentStreak = 0;
-  }
-  stats.totalDurationMs += Math.max(0, matchElapsedMs || 0);
-  stats.averageMatchDurationMs = stats.totalMatches > 0
-    ? Math.round(stats.totalDurationMs / stats.totalMatches)
-    : 0;
-  stats.winRate = stats.totalMatches > 0
-    ? Number((stats.totalWins / stats.totalMatches).toFixed(4))
-    : 0;
-  if (stats.sidesPlayed[currentUserFaction] !== undefined) stats.sidesPlayed[currentUserFaction] += 1;
-  if (stats.modesPlayed[gameMode] !== undefined) stats.modesPlayed[gameMode] += 1;
-  if (opponentType === 'bot' && gameMode === 'duel' && stats.difficultiesPlayed[selectedBotDifficulty] !== undefined) {
-    stats.difficultiesPlayed[selectedBotDifficulty] += 1;
-  }
-  stats.updatedAt = entry.savedAt;
-
-  const prospectiveMatches = [entry, ...persistentProfile.matches].slice(0, VANISH_MATCH_HISTORY_LIMIT);
-  const titleResolution = resolveEntryTitles(entry, stats, prospectiveMatches);
-  titleResolution.qualified.forEach(rule => unlockTitle(rule.key, rule.source, entry.savedAt));
-  entry.title = titleResolution.selectedKey
-    ? { key: titleResolution.selectedKey, source: titleResolution.selectedSource }
-    : null;
-
-  persistentProfile.matches.unshift(entry);
-  if (persistentProfile.matches.length > VANISH_MATCH_HISTORY_LIMIT) {
-    persistentProfile.matches.length = VANISH_MATCH_HISTORY_LIMIT;
-  }
-  persistentProfile.titles.lastShownKey = titleResolution.selectedKey || persistentProfile.titles.lastShownKey || null;
-  persistentProfile.titles.updatedAt = entry.savedAt;
+  persistentProfile = updateProfileWithCompletedMatch(persistentProfile, {
+    entry,
+    currentUserFaction,
+    gameMode,
+    opponentType,
+    selectedBotDifficulty,
+  });
 
   currentMatchSaved = true;
   savePersistentProfile();
@@ -703,49 +446,34 @@ function updateResultFlavorText() {
 }
 
 function getExportSummaryRows() {
-  const rows = [
-    { label: t().exportLabelPlayer, value: resultSummaryPlayer || '' },
-  ];
-
-  if (resultSummaryTitleKey) {
-    rows.push({ label: t().exportLabelTitle, value: getTitleText(resultSummaryTitleKey) });
-  }
-
-  rows.push(
-    { label: t().exportLabelMode, value: getModeSummaryText() },
-    { label: t().exportLabelTime, value: matchElapsedMs > 0 ? formatMatchTime(matchElapsedMs) : '--:--' },
-  );
-
-  if (opponentType === 'bot' && gameMode === 'duel') {
-    rows.push({ label: t().exportLabelDifficulty, value: getDifficultySummaryText() });
-  }
-
-  rows.push({ label: t().exportDate.toUpperCase(), value: formatExportDateLabel() });
-  return rows;
+  return buildExportSummaryRows({
+    t,
+    resultSummaryPlayer,
+    resultSummaryTitleKey,
+    getTitleText,
+    getModeSummaryText,
+    matchElapsedMs,
+    formatMatchTime,
+    opponentType,
+    gameMode,
+    getDifficultySummaryText,
+    formatExportDateLabel,
+  });
 }
 
 function updateResultSummary() {
-  const stateEl = document.getElementById('result-summary-state');
-  const playerEl = document.getElementById('result-summary-player');
-  const titleRow = document.getElementById('result-summary-row-title');
-  const titleEl = document.getElementById('result-summary-title');
-  const modeEl = document.getElementById('result-summary-mode');
-  const difficultyRow = document.getElementById('result-summary-row-difficulty');
-  const difficultyEl = document.getElementById('result-summary-difficulty');
-  if (!stateEl || !playerEl || !titleRow || !titleEl || !modeEl || !difficultyRow || !difficultyEl) return;
-
-  const hasSummary = Boolean(resultSummaryState);
-  stateEl.textContent = hasSummary
-    ? (resultSummaryState === 'loss' ? t().resultDefeat : t().resultVictory)
-    : '';
-  playerEl.textContent = hasSummary ? (resultSummaryPlayer || '') : '';
-  titleRow.style.display = hasSummary && resultSummaryTitleKey ? '' : 'none';
-  titleEl.textContent = hasSummary ? getTitleText(resultSummaryTitleKey) : '';
-  modeEl.textContent = hasSummary ? getModeSummaryText() : '';
-
-  const showDifficulty = hasSummary && opponentType === 'bot' && gameMode === 'duel';
-  difficultyRow.style.display = showDifficulty ? '' : 'none';
-  difficultyEl.textContent = showDifficulty ? getDifficultySummaryText() : '';
+  applyResultSummary({
+    document,
+    t,
+    resultSummaryState,
+    resultSummaryPlayer,
+    resultSummaryTitleKey,
+    getTitleText,
+    getModeSummaryText,
+    opponentType,
+    gameMode,
+    getDifficultySummaryText,
+  });
 }
 
 function updateMatchResultText() {
@@ -802,140 +530,16 @@ function scheduleResultReveal(callback, delay = RESULT_REVEAL_DELAY) {
 
 function exportResultCard() {
   if (!gameOver || !resultSummaryState) return;
-
-  const canvas = document.createElement('canvas');
-  const scale = Math.max(2, Math.min(3, window.devicePixelRatio || 1));
-  const width = 1080;
-  const height = 1350;
-  canvas.width = width * scale;
-  canvas.height = height * scale;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  ctx.scale(scale, scale);
-
-  const isLoss = resultSummaryState === 'loss';
-  const accent = isLoss ? '#a9b9d3' : '#6feeff';
-  const accentSoft = isLoss ? '#7f8da8' : '#00eeff';
-  const accentHot = isLoss ? '#d7e2f5' : '#8ff4ff';
-  const rows = getExportSummaryRows();
-  const titleText = resultSummaryState === 'loss' ? t().resultDefeat : t().resultVictory;
-  const playerText = resultSummaryPlayer || 'VANISH';
-  const flavorText = getResultFlavorText();
-
-  const bg = ctx.createLinearGradient(0, 0, 0, height);
-  bg.addColorStop(0, '#090b12');
-  bg.addColorStop(0.55, '#0a1018');
-  bg.addColorStop(1, '#05070d');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, width, height);
-
-  const flare = ctx.createRadialGradient(width * 0.72, 160, 20, width * 0.72, 160, 520);
-  flare.addColorStop(0, isLoss ? 'rgba(190, 207, 230, 0.18)' : 'rgba(0, 238, 255, 0.22)');
-  flare.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = flare;
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 12; i++) {
-    const y = 120 + i * 96;
-    ctx.beginPath();
-    ctx.moveTo(70, y);
-    ctx.lineTo(width - 70, y);
-    ctx.stroke();
-  }
-
-  const cardX = 86;
-  const cardY = 84;
-  const cardW = width - 172;
-  const cardH = height - 168;
-  const cardGradient = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH);
-  cardGradient.addColorStop(0, 'rgba(15, 20, 32, 0.94)');
-  cardGradient.addColorStop(1, 'rgba(8, 12, 20, 0.97)');
-  ctx.fillStyle = cardGradient;
-  ctx.fillRect(cardX, cardY, cardW, cardH);
-  ctx.strokeStyle = isLoss ? 'rgba(166, 182, 204, 0.3)' : 'rgba(0, 238, 255, 0.28)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(cardX, cardY, cardW, cardH);
-
-  ctx.strokeStyle = isLoss ? 'rgba(214, 225, 242, 0.18)' : 'rgba(111, 238, 255, 0.18)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(cardX + 16, cardY + 16, cardW - 32, cardH - 32);
-
-  ctx.fillStyle = '#eef6ff';
-  ctx.font = '48px "Bebas Neue", sans-serif';
-  ctx.fillText('VANISH', cardX + 44, cardY + 66);
-
-  ctx.fillStyle = accent;
-  ctx.font = '30px "Space Mono", monospace';
-  ctx.fillText(formatExportDateLabel(), cardX + cardW - 210, cardY + 62);
-
-  ctx.fillStyle = accentHot;
-  ctx.shadowColor = isLoss ? 'rgba(215, 226, 245, 0.22)' : 'rgba(0, 238, 255, 0.28)';
-  ctx.shadowBlur = 22;
-  ctx.font = '110px "Bebas Neue", sans-serif';
-  ctx.fillText(titleText, cardX + 40, cardY + 208);
-  ctx.shadowBlur = 0;
-
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '68px "Bebas Neue", sans-serif';
-  ctx.fillText(playerText, cardX + 40, cardY + 292);
-
-  ctx.fillStyle = '#8ca0bf';
-  ctx.font = '28px "Space Mono", monospace';
-  ctx.fillText(flavorText.toUpperCase(), cardX + 42, cardY + 336);
-
-  const summaryX = cardX + 40;
-  const summaryY = cardY + 392;
-  const summaryW = cardW - 80;
-  const summaryH = 90 + rows.length * 82;
-  const summaryGradient = ctx.createLinearGradient(summaryX, summaryY, summaryX, summaryY + summaryH);
-  summaryGradient.addColorStop(0, 'rgba(18, 25, 39, 0.96)');
-  summaryGradient.addColorStop(1, 'rgba(10, 14, 24, 0.98)');
-  ctx.fillStyle = summaryGradient;
-  ctx.fillRect(summaryX, summaryY, summaryW, summaryH);
-  ctx.strokeStyle = isLoss ? 'rgba(142, 158, 182, 0.24)' : 'rgba(0, 238, 255, 0.18)';
-  ctx.strokeRect(summaryX, summaryY, summaryW, summaryH);
-
-  rows.forEach((row, index) => {
-    const y = summaryY + 78 + index * 82;
-    if (index > 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-      ctx.beginPath();
-      ctx.moveTo(summaryX + 24, y - 42);
-      ctx.lineTo(summaryX + summaryW - 24, y - 42);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#73819b';
-    ctx.font = '25px "Space Mono", monospace';
-    ctx.fillText(row.label, summaryX + 28, y);
-    ctx.fillStyle = '#edf5ff';
-    ctx.font = '44px "Bebas Neue", sans-serif';
-    const value = String(row.value || '');
-    const measured = ctx.measureText(value).width;
-    ctx.fillText(value, summaryX + summaryW - 28 - measured, y + 4);
+  downloadResultCard({
+    document,
+    window,
+    t,
+    resultSummaryState,
+    resultSummaryPlayer,
+    getExportSummaryRows,
+    getResultFlavorText,
+    formatExportDateLabel,
   });
-
-  ctx.strokeStyle = accentSoft;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(cardX + 40, cardY + cardH - 182);
-  ctx.lineTo(cardX + cardW - 40, cardY + cardH - 182);
-  ctx.stroke();
-
-  ctx.fillStyle = accent;
-  ctx.font = '26px "Space Mono", monospace';
-  ctx.fillText('NEON TACTICAL RECORD', cardX + 40, cardY + cardH - 130);
-  ctx.fillStyle = '#71819b';
-  ctx.fillText('xo.walterpng.github.io/vanish', cardX + 40, cardY + cardH - 84);
-
-  const link = document.createElement('a');
-  const safeName = (resultSummaryPlayer || 'vanish').toLowerCase().replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'vanish';
-  link.download = `vanish-${safeName}-${formatExportDateLabel()}.png`;
-  link.href = canvas.toDataURL('image/png');
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
 }
 
 function updateDailyResultText(mode = 'win') {
@@ -1051,6 +655,7 @@ function startDailyChallenge() {
   beginMatchRecord();
   statusEl.textContent = t().movesFirst(playerDisplayName('cipher'));
   statusEl.style.color  = 'var(--cipher)';
+  syncWindowAppState();
   cellEl(0).focus();
 }
 
@@ -1175,6 +780,7 @@ function selectMode(m) {
   document.getElementById('btn-mode-ranked').classList.toggle('active', m === 'ranked');
   document.getElementById('btn-mode-daily').classList.toggle('active', m === 'daily');
   syncRankedLockState();
+  syncWindowAppState();
 }
 
 function selectOpponentType(type) {
@@ -1183,6 +789,7 @@ function selectOpponentType(type) {
   document.getElementById('btn-opponent-local').classList.toggle('active', type === 'local');
   syncAvailableModes();
   updateSetupNicknameFields();
+  syncWindowAppState();
 }
 
 // ─── RANK SYSTEM (session-only) ───────────────────────────────────────────────
@@ -1363,6 +970,17 @@ function createMarkElement(player, extraClass = '') {
   wrap.className = ['cell-mark', markClass(player), extraClass].filter(Boolean).join(' ');
   wrap.innerHTML = player === 'cipher' ? cipherSVG('#00eeff') : wraithSVG('#ff00cc');
   return wrap;
+}
+
+function triggerPlacementImpact(cell, player) {
+  if (!cell) return;
+  const impactClass = player === 'cipher' ? 'placement-impact-cipher' : 'placement-impact-wraith';
+  cell.classList.remove('placement-impact', 'placement-impact-cipher', 'placement-impact-wraith');
+  void cell.offsetWidth;
+  cell.classList.add('placement-impact', impactClass);
+  setTimeout(() => {
+    cell.classList.remove('placement-impact', 'placement-impact-cipher', 'placement-impact-wraith');
+  }, 520);
 }
 
 let comboTimer = null;
@@ -1821,6 +1439,7 @@ function placeNewMark(player, index, oppThreatsBeforeMove) {
   const cell = cellEl(index);
   cell.classList.add('occupied');
   cell.insertBefore(createMarkElement(player, 'placed'), cell.firstChild);
+  triggerPlacementImpact(cell, player);
   SFX.place();
 
   setTimeout(() => {
@@ -1858,6 +1477,7 @@ function triggerDailyFail() {
   stopDailyTimer('fail');
   stopMatchTimer();
   gameOver = true;
+  syncWindowAppState();
   resultSummaryState = 'loss';
   resultSummaryPlayer = currentUserName;
   resultFlavorLine = pickResultFlavorLine('loss', currentUserName);
@@ -1891,6 +1511,7 @@ function triggerWin(winner) {
   if (gameMode === 'daily') stopDailyTimer('win');
   stopMatchTimer();
   gameOver = true;
+  syncWindowAppState();
   roundsCompleted++;
   score[winner]++;
   updateScoreDisplay();
@@ -1987,6 +1608,7 @@ function startConfiguredMatch(resetSeries = true) {
   document.getElementById('daily-result').textContent = '';
   statusEl.textContent = t().movesFirst(playerDisplayName('cipher'));
   statusEl.style.color  = 'var(--cipher)';
+  syncWindowAppState();
   cellEl(0).focus();
   if (isBotTurn()) scheduleBotMove();
 }
@@ -2025,6 +1647,7 @@ function restartGame() {
   document.getElementById('daily-result').textContent = '';
   statusEl.textContent = t().movesFirst(playerDisplayName('cipher'));
   statusEl.style.color  = 'var(--cipher)';
+  syncWindowAppState();
   cellEl(0).focus();
   if (isBotTurn()) scheduleBotMove();
 }
@@ -2103,41 +1726,90 @@ function closeRulesOnBackdrop(e) {
   if (e.target === document.getElementById('rules-overlay')) closeRules();
 }
 
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-document.addEventListener('click', e => {
-  const menuControl = e.target.closest('.btn, .lang-btn, .mode-btn, .sound-btn, .setup-music-toggle, .setup-opponent-btn, .setup-bot-btn, .setup-round-btn');
-  if (!menuControl) return;
-  if (typeof ensureMusicFromUserGesture === 'function') ensureMusicFromUserGesture();
-  SFX.click();
-}, true);
-
-score = { cipher: 0, wraith: 0 };
-persistentProfile = loadPersistentProfile();
-injectPanelSymbols();
-initState();
-buildBoard();
-render();
-updateReplayButtonState();
-
-tgUser = getTelegramUser();
-if (tgUser) {
-  const tgName = (tgUser.first_name || tgUser.username || '').trim().slice(0, 16);
-  if (tgName) currentUserName = tgName;
+function syncWindowAppState() {
+  window.appState = {
+    gameMode,
+    opponentType,
+    gameOver,
+  };
 }
 
-nicknames.cipher = currentUserName;
-updatePanelNames();
-document.getElementById('input-p1').placeholder = t().defaultP1;
-document.getElementById('input-p2').placeholder = t().defaultP2;
-if (tgUser) {
-  document.getElementById('input-p1').value = currentUserName;
+function refreshLocalizedUi() {
+  updateSetupNicknameFields();
+  updateModeBadge();
+  updateResultSummary();
+  updateResultFlavorText();
+  updateMatchResultText();
+  updateAgainButtonLabel();
+  syncRankedLockState();
+  syncLocalizedOpponentName();
+  updateReplayButtonState();
+  syncWindowAppState();
 }
-document.getElementById('setup-overlay').classList.add('show');
-selectMode(gameMode);
-selectOpponentType(opponentType);
-selectBotDifficulty(selectedBotDifficulty);
-selectRoundCount(selectedRoundCount);
-updateSetupNicknameFields();
-updateAgainButtonLabel();
-syncRankedLockState();
-document.getElementById('input-p1').focus();
+
+function initApp() {
+  document.addEventListener('click', e => {
+    const menuControl = e.target.closest('.btn, .lang-btn, .mode-btn, .sound-btn, .setup-music-toggle, .setup-opponent-btn, .setup-bot-btn, .setup-round-btn');
+    if (!menuControl) return;
+    if (typeof ensureMusicFromUserGesture === 'function') ensureMusicFromUserGesture();
+    SFX.click();
+  }, true);
+
+  score = { cipher: 0, wraith: 0 };
+  persistentProfile = loadPersistentProfile();
+  injectPanelSymbols();
+  initState();
+  buildBoard();
+  render();
+  updateReplayButtonState();
+
+  tgUser = getTelegramUser();
+  if (tgUser) {
+    const tgName = (tgUser.first_name || tgUser.username || '').trim().slice(0, 16);
+    if (tgName) currentUserName = tgName;
+  }
+
+  nicknames.cipher = currentUserName;
+  updatePanelNames();
+  document.getElementById('input-p1').placeholder = t().defaultP1;
+  document.getElementById('input-p2').placeholder = t().defaultP2;
+  if (tgUser) {
+    document.getElementById('input-p1').value = currentUserName;
+  }
+  document.getElementById('setup-overlay').classList.add('show');
+  selectMode(gameMode);
+  selectOpponentType(opponentType);
+  selectBotDifficulty(selectedBotDifficulty);
+  selectRoundCount(selectedRoundCount);
+  updateSetupNicknameFields();
+  updateAgainButtonLabel();
+  syncRankedLockState();
+  syncWindowAppState();
+  document.getElementById('input-p1').focus();
+}
+
+export {
+  initApp,
+  openSetup,
+  openRules,
+  closeRules,
+  closeRulesOnBackdrop,
+  selectMode,
+  selectOpponentType,
+  selectBotDifficulty,
+  selectRoundCount,
+  startFromSetup,
+  closeDailyInfoOnBackdrop,
+  startDailyChallenge,
+  closeDailyInfo,
+  exportResultCard,
+  handleAgainButton,
+  handleMenuButton,
+  playLatestMatchReplay,
+  refreshLocalizedUi,
+  syncAvailableModes,
+  updateModeBadge,
+  setResultPresentation,
+  syncRankedLockState,
+  syncLocalizedOpponentName,
+};

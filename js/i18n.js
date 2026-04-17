@@ -257,19 +257,12 @@ function setLang(l) {
   document.getElementById('btn-mode-duel').textContent   = t().modeDuel;
   document.getElementById('btn-mode-ranked').textContent = t().modeRanked;
   document.getElementById('btn-mode-daily').textContent  = t().modeDaily;
-  if (typeof syncAvailableModes !== 'undefined') syncAvailableModes();
-  if (typeof updateModeBadge !== 'undefined') updateModeBadge();
-  if (typeof updateAgainButtonLabel !== 'undefined') updateAgainButtonLabel();
-  if (typeof updateDailyResultText !== 'undefined' && typeof gameMode !== 'undefined' && gameMode === 'daily' && typeof gameOver !== 'undefined' && gameOver) {
-    updateDailyResultText(document.getElementById('score-display').textContent ? 'win' : 'fail');
-  }
-  if (typeof updateResultSummary !== 'undefined') updateResultSummary();
-  if (typeof updateResultFlavorText !== 'undefined') updateResultFlavorText();
-  if (typeof updateMatchResultText !== 'undefined') updateMatchResultText();
-  if (typeof setResultPresentation !== 'undefined') {
+  if (typeof window.syncAvailableModes === 'function') window.syncAvailableModes();
+  if (typeof window.refreshLocalizedUi === 'function') window.refreshLocalizedUi();
+  if (typeof window.setResultPresentation === 'function') {
     const winOverlay = document.getElementById('win-overlay');
     if (winOverlay && winOverlay.classList.contains('show')) {
-      setResultPresentation(winOverlay.classList.contains('is-loss') ? 'loss' : 'win');
+      window.setResultPresentation(winOverlay.classList.contains('is-loss') ? 'loss' : 'win');
     }
   }
 
@@ -280,8 +273,8 @@ function setLang(l) {
   if (inp2) inp2.placeholder = t().defaultP2;
   const labelP1 = document.getElementById('label-p1');
   const labelP2 = document.getElementById('label-p2');
-  if (labelP1 && typeof updateSetupNicknameFields !== 'undefined') {
-    labelP1.textContent = opponentType === 'local' ? t().setupLabelP1 : t().setupLabelC;
+  if (labelP1 && window.appState) {
+    labelP1.textContent = window.appState.opponentType === 'local' ? t().setupLabelP1 : t().setupLabelC;
   }
   if (labelP2) labelP2.textContent = t().setupLabelP2;
   const btnOpponentBot = document.getElementById('btn-opponent-bot');
@@ -300,22 +293,9 @@ function setLang(l) {
   if (setupMusicText) setupMusicText.textContent = t().setupLabelMusic;
   const rankedLock = document.getElementById('setup-ranked-lock');
   if (rankedLock) rankedLock.textContent = t().comingSoon;
-  if (typeof setMusicButtonState !== 'undefined') setMusicButtonState();
-  if (typeof syncRankedLockState !== 'undefined') syncRankedLockState();
-  if (typeof syncLocalizedOpponentName !== 'undefined') syncLocalizedOpponentName();
-
-  // re-render dynamic status text
-  if (typeof gameOver !== 'undefined' && !gameOver) {
-    if (typeof historyCounter !== 'undefined' && historyCounter === 0) {
-      const name = typeof nicknames !== 'undefined' ? nicknames.cipher : 'CIPHER';
-      document.getElementById('status-msg').textContent = t().movesFirst(name);
-      document.getElementById('status-msg').style.color = 'var(--cipher)';
-    } else {
-      const name = typeof nicknames !== 'undefined'
-        ? nicknames[currentPlayer]
-        : currentPlayer.toUpperCase();
-      document.getElementById('status-msg').textContent = t().placeYourMark(name);
-      document.getElementById('status-msg').style.color = currentPlayer === 'cipher' ? 'var(--cipher)' : 'var(--wraith)';
-    }
-  }
+  if (typeof window.setMusicButtonState === 'function') window.setMusicButtonState();
+  if (typeof window.syncRankedLockState === 'function') window.syncRankedLockState();
+  if (typeof window.syncLocalizedOpponentName === 'function') window.syncLocalizedOpponentName();
 }
+
+export { t, setLang };

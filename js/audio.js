@@ -1,3 +1,5 @@
+import { t } from './i18n.js';
+
 // ─── AUDIO ENGINE ─────────────────────────────────────────────────────────────
 let audioCtx = null;
 let soundEnabled = true;
@@ -610,3 +612,11 @@ const SFX = {
 };
 
 setMusicButtonState();
+
+export {
+  SFX,
+  toggleSound,
+  toggleMusic,
+  ensureMusicFromUserGesture,
+  setMusicButtonState,
+};
